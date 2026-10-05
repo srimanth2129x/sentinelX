@@ -28,7 +28,7 @@ export default function EvidenceModal({ alert, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="bg-white dark:bg-[#111724] border border-slate-200 dark:border-[#1e2738] rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden theme-transition">
+      <div className="bg-white dark:bg-surface-base border border-slate-200/90 dark:border-border-base rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden theme-transition">
         
         {/* Modal Header */}
         <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-800">
@@ -133,7 +133,7 @@ export default function EvidenceModal({ alert, onClose }) {
           </div>
 
           {/* Node Detail Inspector */}
-          <div className="p-4 bg-white dark:bg-[#111724] overflow-y-auto">
+          <div className="p-4 bg-white dark:bg-surface-base overflow-y-auto">
             <span className="text-xs font-mono uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">
               Node Evidence Inspector
             </span>

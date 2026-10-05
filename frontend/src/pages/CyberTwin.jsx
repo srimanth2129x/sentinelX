@@ -127,7 +127,7 @@ export function CyberTwin() {
   return (
     <div className="space-y-6">
       {/* 1. Header Banner & View Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-[#111724] p-4 border border-slate-200 dark:border-[#1e2738] rounded-xl shadow-sm theme-transition">
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-surface-base p-4 border border-slate-200/90 dark:border-border-base rounded shadow-xs theme-transition">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white">
             <Share2 className="w-5 h-5" />
@@ -210,7 +210,7 @@ export function CyberTwin() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Interactive Graph & Path Canvas */}
         <div className="lg:col-span-2 space-y-4">
-          <Card className="min-h-[520px] relative overflow-hidden bg-slate-50/60 dark:bg-[#0c1018] border-slate-200 dark:border-[#1e2738] flex flex-col justify-between p-5">
+          <Card className="min-h-[520px] relative overflow-hidden bg-slate-50/60 dark:bg-surface-elevated/40 border-slate-200/90 dark:border-border-base flex flex-col justify-between p-5">
             <SectionHeader
               title={
                 activeTab === 'topology'

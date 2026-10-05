@@ -32,7 +32,7 @@ logger = logging.getLogger("sentineltwin-sensor")
 
 DEFAULT_SERVER = "http://127.0.0.1:5000"
 DEFAULT_INTERVAL = 5  # seconds between event polls
-DEFAULT_SENSOR_TOKEN = os.getenv("SENSOR_TOKEN", "sentinel-sensor-auth-token-xyz").strip()
+DEFAULT_SENSOR_TOKEN = os.getenv("SENSOR_TOKEN", "").strip()
 
 # Build-time embedded server URL (injected during PyInstaller compilation)
 try:

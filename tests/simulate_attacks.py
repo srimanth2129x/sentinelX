@@ -1,15 +1,16 @@
 """
 SentinelTwin Telemetry & Attack Simulation Script (Dynamic IDs)
 """
+import os
 import time
 import requests
 from datetime import datetime, timezone
 
-BACKEND_URL = "http://127.0.0.1:5000"
-HEADERS = {
-    "Content-Type": "application/json",
-    "X-Sensor-Token": "sentinel-sensor-auth-token-xyz"
-}
+BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:5000").rstrip("/")
+SENSOR_TOKEN = os.getenv("SENSOR_TOKEN", "").strip()
+HEADERS = {"Content-Type": "application/json"}
+if SENSOR_TOKEN:
+    HEADERS["X-Sensor-Token"] = SENSOR_TOKEN
 
 def current_time():
     return datetime.now(timezone.utc).isoformat()

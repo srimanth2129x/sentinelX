@@ -15,12 +15,22 @@ Database Schema Overview:
 """
 import sqlite3
 import os
+from pathlib import Path
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from werkzeug.security import generate_password_hash
 
 # Default fallback SQLite path if none is explicitly specified in config
 DEFAULT_DB_PATH = os.path.join(os.path.dirname(__file__), "sentineltwin.db")
+
+
+def _ensure_db_dir(path: str):
+    """Safely ensures the parent directory of a SQLite database file exists."""
+    if not path or path == ":memory:" or path.startswith("file:"):
+        return
+    db_file = Path(path)
+    if db_file.parent:
+        db_file.parent.mkdir(parents=True, exist_ok=True)
 
 
 @contextmanager
@@ -36,6 +46,7 @@ def get_conn(db_path=None):
         db_path (str, optional): Absolute or relative filesystem path to the SQLite file.
     """
     path = db_path or DEFAULT_DB_PATH
+    _ensure_db_dir(path)
     conn = sqlite3.connect(path)
     # Enable sqlite3.Row so query results can be accessed by column name (row['device_id'])
     conn.row_factory = sqlite3.Row
@@ -51,10 +62,12 @@ def get_conn(db_path=None):
 
 def init_db(db_path=None):
     """
-    Initializes database tables, creates performance indexes, seeds the admin user,
+    Initializes database tables, creates performance indexes, seeds optional admin user,
     and applies non-destructive column migrations for backwards compatibility.
     """
-    with get_conn(db_path) as conn:
+    path = db_path or DEFAULT_DB_PATH
+    _ensure_db_dir(path)
+    with get_conn(path) as conn:
         cur = conn.cursor()
 
         # -----------------------------------------------------------------
@@ -306,11 +319,14 @@ def init_db(db_path=None):
         cur.execute("CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(severity, status)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_devices_criticality ON devices(criticality)")
 
-        # 10. Seed Default Administrator if no users exist
-        cur.execute("SELECT COUNT(*) as count FROM users")
-        if cur.fetchone()["count"] == 0:
-            now = datetime.now(timezone.utc).isoformat()
-            cur.execute("""
-                INSERT INTO users (username, password_hash, role, created_at)
-                VALUES (?, ?, ?, ?)
-            """, ("admin", generate_password_hash("SentinelAdmin#2026"), "Administrator", now))
+        # 10. Bootstrap Initial Administrator (Opt-in via environment variables only)
+        bootstrap_user = os.getenv("BOOTSTRAP_ADMIN_USER", "").strip()
+        bootstrap_password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "").strip()
+        if bootstrap_user and bootstrap_password:
+            cur.execute("SELECT COUNT(*) as count FROM users WHERE username = ?", (bootstrap_user,))
+            if cur.fetchone()["count"] == 0:
+                now = datetime.now(timezone.utc).isoformat()
+                cur.execute("""
+                    INSERT INTO users (username, password_hash, role, created_at)
+                    VALUES (?, ?, ?, ?)
+                """, (bootstrap_user, generate_password_hash(bootstrap_password), "Administrator", now))

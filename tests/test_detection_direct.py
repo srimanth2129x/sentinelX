@@ -2,15 +2,16 @@
 SentinelTwin Direct Detection & Alert Generator
 Seeds the device directly, generates an alert, and links topology for immediate detection.
 """
+import os
 import requests
 import time
 from datetime import datetime, timezone
 
-BASE_URL = "http://127.0.0.1:5000"
-HEADERS = {
-    "Content-Type": "application/json",
-    "X-Sensor-Token": "sentinel-sensor-auth-token-xyz"
-}
+BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:5000").rstrip("/")
+SENSOR_TOKEN = os.getenv("SENSOR_TOKEN", "").strip()
+HEADERS = {"Content-Type": "application/json"}
+if SENSOR_TOKEN:
+    HEADERS["X-Sensor-Token"] = SENSOR_TOKEN
 
 def run():
     now = datetime.now(timezone.utc).isoformat()

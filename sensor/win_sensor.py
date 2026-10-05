@@ -14,7 +14,9 @@ CHECKPOINT_FILE = Path("data") / "sensor_checkpoint.json"
 class WindowsTelemetrySensor:
     def __init__(self, backend_url: str = "http://127.0.0.1:5000", sensor_token: str = None):
         self.backend_url = backend_url.rstrip("/")
-        self.sensor_token = sensor_token or os.getenv("SENSOR_TOKEN", "sentinel-sensor-auth-token-xyz").strip()
+        self.sensor_token = (sensor_token if sensor_token is not None else os.getenv("SENSOR_TOKEN", "")).strip()
+        if not self.sensor_token:
+            logger.warning("SENSOR_TOKEN is not configured; sensor telemetry requests may be rejected by the backend.")
         self.checkpoints = self._load_checkpoints()
 
     def _load_checkpoints(self) -> dict:

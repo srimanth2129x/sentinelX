@@ -93,7 +93,7 @@ function AppContent() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[#f4f6f9] dark:bg-[#080b11] text-slate-900 dark:text-slate-100 theme-transition">
+    <div className="flex flex-col h-screen overflow-hidden bg-slate-100 dark:bg-bg-page text-slate-900 dark:text-text-primary theme-transition">
       {/* 1. TOP EXECUTIVE BAR */}
       <TopBar status={status} onRefresh={loadStatus} />
 
@@ -106,8 +106,8 @@ function AppContent() {
           incidentCount={incidentCount}
         />
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#f8fafc]/80 dark:bg-[#080b11]/90 relative">
-          <div key={page} className="page-enter max-w-7xl mx-auto">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 2xl:p-8 bg-[#f8fafc]/80 dark:bg-bg-page relative w-full">
+          <div key={page} className="page-enter w-full max-w-[2560px] mx-auto">
             {pages[page] || (
               <div className="p-8 text-center text-slate-500 font-mono text-xs">
                 Page "{page}" not found.

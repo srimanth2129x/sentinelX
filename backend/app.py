@@ -35,6 +35,9 @@ def create_app(db_path: str = None) -> Flask:
     Returns:
         Flask: Fully configured Flask WSGI application.
     """
+    # Enforce configuration validation (fail-closed in production)
+    config.validate()
+
     app = Flask(__name__)
 
     # Determine database path: prioritize passed argument (e.g., in unit tests),

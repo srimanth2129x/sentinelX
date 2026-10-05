@@ -11,71 +11,69 @@ export function TopBar({ status = {}, onRefresh, refreshing }) {
   const activeSubnet = status.subnet || '192.168.0.0/24'
 
   return (
-    <header className="w-full bg-white dark:bg-[#0c1018] border-b border-slate-200 dark:border-[#1e2738] px-4 py-2.5 flex items-center justify-between select-none z-30 shrink-0 theme-transition">
-      {/* Left: Branding & Core Architecture Tagline */}
+    <header className="w-full bg-white dark:bg-surface-base border-b border-slate-200 dark:border-border-base px-4 py-2.5 flex items-center justify-between select-none z-30 shrink-0 theme-transition">
+      {/* Left: Branding & Tagline */}
       <div className="flex items-center gap-3">
-        <div className="relative flex items-center justify-center w-8 h-8 rounded-lg bg-slate-900 dark:bg-slate-800 text-white shadow-sm border border-slate-700">
+        <div className="relative flex items-center justify-center w-8 h-8 rounded bg-slate-900 dark:bg-surface-elevated text-white shadow-xs border border-slate-700/80 dark:border-border-strong">
           <Shield className="w-4 h-4 text-emerald-400" />
-          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500" />
         </div>
 
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-mono font-extrabold tracking-wider text-slate-900 dark:text-slate-100 uppercase">
-              Sentinel<span className="text-slate-500 dark:text-slate-400 font-semibold">Twin</span>
+            <span className="text-sm font-bold tracking-tight text-slate-900 dark:text-text-primary">
+              Sentinel<span className="text-slate-500 dark:text-text-secondary font-medium">Twin</span>
             </span>
-            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold tracking-widest uppercase">
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-surface-elevated border border-slate-200 dark:border-border-strong text-slate-700 dark:text-text-muted font-semibold tracking-wider uppercase">
               SOC CONSOLE
             </span>
           </div>
-          <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400 tracking-tight hidden sm:block">
-            Continuous Endpoint Baseline & Digital Twin Platform
+          <p className="text-[11px] text-slate-500 dark:text-text-muted tracking-normal hidden sm:block">
+            Endpoint Behavioral Baseline & Digital Twin Intelligence
           </p>
         </div>
       </div>
 
       {/* Center: Live System Posture Telemetry */}
-      <div className="hidden lg:flex items-center gap-5 text-xs font-mono">
+      <div className="hidden md:flex items-center gap-3 xl:gap-5 text-xs">
         {/* Core Health Pill */}
-        <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
+        <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-slate-100 dark:bg-surface-elevated border border-slate-200 dark:border-border-base text-slate-700 dark:text-text-secondary">
           <span
             className={`w-2 h-2 rounded-full shrink-0 ${
-              isOnline
-                ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]'
-                : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]'
+              isOnline ? 'bg-emerald-500' : 'bg-red-500'
             }`}
           />
           <span className="text-[11px] font-semibold tracking-wide">
             {isOnline ? 'OPERATIONAL' : 'DISCONNECTED'}
           </span>
-          <span className="text-[9px] text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-100 dark:bg-emerald-950/60 px-1 py-0.2 rounded border border-emerald-300 dark:border-emerald-800/60">
+          <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-300 dark:border-emerald-800/60">
             CONNECTED
           </span>
         </div>
 
         {/* Subnet Indicator */}
-        <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-[11px]">
-          <Activity className="w-3.5 h-3.5 text-slate-400" />
-          <span>SUBNET:</span>
-          <span className="text-slate-800 dark:text-slate-200 font-semibold">{activeSubnet}</span>
+        <div className="hidden xl:flex items-center gap-1.5 text-slate-500 dark:text-text-secondary text-xs">
+          <Activity className="w-3.5 h-3.5 text-text-muted" />
+          <span className="text-[11px] font-medium text-text-muted">SUBNET:</span>
+          <span className="text-slate-800 dark:text-text-primary font-mono font-semibold text-[11px]">{activeSubnet}</span>
         </div>
 
         {/* Sensor State */}
-        <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-[11px]">
-          <Server className="w-3.5 h-3.5 text-slate-400" />
-          <span>SENSORS:</span>
-          <span className={`font-semibold ${activeSensors > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>
+        <div className="hidden lg:flex items-center gap-1.5 text-slate-500 dark:text-text-secondary text-xs">
+          <Server className="w-3.5 h-3.5 text-text-muted" />
+          <span className="text-[11px] font-medium text-text-muted">SENSORS:</span>
+          <span className={`font-mono text-[11px] font-semibold ${activeSensors > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-text-secondary'}`}>
             {activeSensors > 0 ? `${activeSensors} ONLINE` : 'STANDBY'}
           </span>
         </div>
 
         {/* Devices Summary */}
-        <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-[11px]">
-          <Cpu className="w-3.5 h-3.5 text-slate-400" />
-          <span>ASSETS:</span>
-          <span className="text-slate-800 dark:text-slate-200 font-bold">
+        <div className="hidden xl:flex items-center gap-1.5 text-slate-500 dark:text-text-secondary text-xs">
+          <Cpu className="w-3.5 h-3.5 text-text-muted" />
+          <span className="text-[11px] font-medium text-text-muted">ASSETS:</span>
+          <span className="text-slate-800 dark:text-text-primary font-mono font-bold text-[11px]">
             {onlineDevices}
-            <span className="text-slate-400 font-normal">/{totalDevices || onlineDevices || 1} MONITORED</span>
+            <span className="text-text-faint font-normal">/{totalDevices || onlineDevices || 1} MONITORED</span>
           </span>
         </div>
       </div>
@@ -85,14 +83,14 @@ export function TopBar({ status = {}, onRefresh, refreshing }) {
         {/* Light / Dark Mode Toggle */}
         <button
           onClick={toggleTheme}
-          className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-md transition cursor-pointer"
+          className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200 dark:border-border-base text-slate-600 dark:text-text-secondary rounded transition cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400 dark:focus-visible:ring-slate-500 outline-none"
           title={isDark ? 'Switch to Clean Light Mode' : 'Switch to Dark SOC Mode'}
           aria-label="Toggle theme"
         >
           {isDark ? (
-            <Sun className="w-3.5 h-3.5 text-amber-400 transition-transform hover:rotate-45" />
+            <Sun className="w-3.5 h-3.5 text-amber-400" />
           ) : (
-            <Moon className="w-3.5 h-3.5 text-slate-700 transition-transform hover:-rotate-12" />
+            <Moon className="w-3.5 h-3.5 text-slate-700" />
           )}
         </button>
 
@@ -101,18 +99,19 @@ export function TopBar({ status = {}, onRefresh, refreshing }) {
           <button
             onClick={onRefresh}
             disabled={refreshing}
-            className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-md transition cursor-pointer"
+            className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200 dark:border-border-base text-slate-600 dark:text-text-secondary rounded transition cursor-pointer focus-visible:ring-2 focus-visible:ring-slate-400 dark:focus-visible:ring-slate-500 outline-none"
             title="Refresh Telemetry"
+            aria-label="Refresh telemetry data"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-slate-900 dark:text-white' : ''}`} />
           </button>
         )}
 
         {/* Operator Badge */}
-        <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] font-mono">
+        <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-slate-100 dark:bg-surface-elevated border border-slate-200 dark:border-border-base text-[11px]">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          <span className="text-slate-800 dark:text-slate-200 font-semibold">SOC OPERATOR</span>
-          <span className="text-slate-400 text-[10px] hidden sm:inline">· AUDIT</span>
+          <span className="text-slate-800 dark:text-text-primary font-semibold font-mono text-[10px]">SOC OPERATOR</span>
+          <span className="text-slate-400 dark:text-text-faint text-[10px] hidden sm:inline">· AUDIT</span>
         </div>
       </div>
     </header>
