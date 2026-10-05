@@ -32,6 +32,36 @@ INSECURE_SECRETS = {
     "<provided through environment>",
 }
 
+def _load_dotenv_safely():
+    """Safely loads environment variables from .env file if present, without overriding existing vars."""
+    env_paths = [
+        BASE_DIR / ".env",
+        Path.cwd() / ".env",
+    ]
+    for env_file in env_paths:
+        if env_file.is_file():
+            try:
+                import dotenv
+                dotenv.load_dotenv(dotenv_path=env_file, override=False)
+                return
+            except ImportError:
+                pass
+            try:
+                with open(env_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        if "=" in line:
+                            key, val = line.split("=", 1)
+                            key = key.strip()
+                            val = val.strip().strip("'\"")
+                            if key and key not in os.environ:
+                                os.environ[key] = val
+                return
+            except Exception as e:
+                logger.warning(f"Failed to read .env file at {env_file}: {e}")
+
 class Config:
     """
     Centralized configuration container for SentinelTwin backend services.
@@ -43,13 +73,15 @@ class Config:
 
     def reload(self):
         """Loads and validates configuration from environment variables."""
+        _load_dotenv_safely()
+
         # Environment mode (development / production / testing)
         self.ENV = os.getenv("FLASK_ENV", "development").strip().lower()
         # Debug mode flag enables hot-reloading and detailed traceback in development
         self.DEBUG = os.getenv("FLASK_DEBUG", "False").lower() in ("true", "1", "t")
-        # Network bind port and host for Flask REST API
+        # Network bind port and host for Flask REST API (defaults to localhost for presentation safety)
         self.PORT = int(os.getenv("PORT", 5000))
-        self.HOST = os.getenv("HOST", "0.0.0.0")
+        self.HOST = os.getenv("HOST", "127.0.0.1")
 
         # Primary SQLite database file location: defaults to sentineltwin/data/sentineltwin.db
         self.DB_PATH = os.getenv("DB_PATH", str(BASE_DIR / "data" / "sentineltwin.db"))

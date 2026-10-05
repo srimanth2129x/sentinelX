@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import {
   Gauge,
   Shield,
@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   RefreshCw,
   ChevronRight,
+  RotateCcw,
 } from 'lucide-react'
 import { getRiskDevices, getRiskSummary, getDevices, getAlerts } from '../api/client'
 import { Card, SectionHeader, StatCard, Spinner, EmptyState } from '../components/ui/Card'
@@ -18,6 +19,11 @@ export function RiskIntel() {
   const [summary, setSummary] = useState({})
   const [selectedDeviceId, setSelectedDeviceId] = useState('')
   const [loading, setLoading] = useState(true)
+  const hasInitialized = useRef(false)
+
+  const handleClearView = () => {
+    setSelectedDeviceId('')
+  }
 
   const loadData = useCallback(async () => {
     try {
@@ -50,15 +56,16 @@ export function RiskIntel() {
       setRiskDevices(merged)
       setSummary(sumRes.data || {})
 
-      if (merged.length > 0 && !selectedDeviceId) {
+      if (merged.length > 0 && !hasInitialized.current) {
         setSelectedDeviceId(merged[0].id)
+        hasInitialized.current = true
       }
     } catch (err) {
       console.error('Failed to load risk intelligence data:', err)
     } finally {
       setLoading(false)
     }
-  }, [selectedDeviceId])
+  }, [])
 
   useEffect(() => {
     loadData()
@@ -68,19 +75,21 @@ export function RiskIntel() {
     return <Spinner message="Calculating explainable point-attribution risk..." />
   }
 
-  const selectedDevice = riskDevices.find((d) => d.id === selectedDeviceId) || riskDevices[0] || {}
-  const deviceScore = selectedDevice.peak_risk ?? selectedDevice.risk_score ?? 0
-  const deviceLevel = selectedDevice.risk_level || (deviceScore >= 80 ? 'HOSTILE' : deviceScore >= 50 ? 'HIGH RISK' : deviceScore >= 25 ? 'SUSPICIOUS' : 'ADAPTIVE')
+  const selectedDevice = selectedDeviceId ? (riskDevices.find((d) => d.id === selectedDeviceId) || null) : null
+  const deviceScore = selectedDevice ? (selectedDevice.peak_risk ?? selectedDevice.risk_score ?? 0) : 0
+  const deviceLevel = selectedDevice
+    ? (selectedDevice.risk_level || (deviceScore >= 80 ? 'HOSTILE' : deviceScore >= 50 ? 'HIGH RISK' : deviceScore >= 25 ? 'SUSPICIOUS' : 'ADAPTIVE'))
+    : 'ADAPTIVE'
 
   // Calculate Explainable Point Breakdown based on real device telemetry & alerts
-  const devAlerts = selectedDevice.alerts || []
+  const devAlerts = selectedDevice?.alerts || []
   const hasCyberDnaDrift = deviceScore > 20
   const hasSuspiciousProcess = devAlerts.some((a) => (a.title || a.description || '').toLowerCase().includes('process') || (a.title || '').toLowerCase().includes('powershell'))
   const hasAuthFailure = devAlerts.some((a) => (a.title || a.description || '').toLowerCase().includes('logon') || (a.title || '').toLowerCase().includes('auth'))
   const hasMitreTechnique = devAlerts.some((a) => a.mitre_technique_id)
 
   const factors = []
-  if (deviceScore > 0) {
+  if (selectedDevice && deviceScore > 0) {
     if (hasCyberDnaDrift) {
       factors.push({ name: 'CyberDNA Behavioral Baseline Drift', points: Math.min(Math.round(deviceScore * 0.4), 35), type: 'behavior' })
     }
@@ -121,13 +130,25 @@ export function RiskIntel() {
           </div>
         </div>
 
-        <button
-          onClick={loadData}
-          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Recalculate
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleClearView}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+            title="Clear selected device detail view"
+            aria-label="Clear View"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Clear View
+          </button>
+          <button
+            onClick={loadData}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+            aria-label="Recalculate risk"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Recalculate
+          </button>
+        </div>
       </div>
 
       {/* Overview Stat Cards */}
@@ -257,90 +278,104 @@ export function RiskIntel() {
         {/* Right Col: Explainable Risk Console */}
         <div className="space-y-4">
           <Card>
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 mb-4">
-              <div>
-                <span className="text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 font-semibold block">
-                  Target Asset Analysis
-                </span>
-                <h3 className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-                  {selectedDevice.hostname || selectedDevice.ip_address || 'Selected Device'}
+            {!selectedDevice ? (
+              <div className="py-12 px-4 text-center">
+                <Gauge className="w-8 h-8 text-slate-400 mx-auto mb-2 opacity-50" />
+                <h3 className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100">
+                  No Asset Selected
                 </h3>
+                <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-1 max-w-xs mx-auto">
+                  Click on any endpoint in the inventory table to inspect its explainable risk point factors.
+                </p>
               </div>
-              <RiskBadge level={deviceLevel} />
-            </div>
-
-            {/* Big Risk Meter */}
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-center space-y-1 mb-4">
-              <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest block font-semibold">
-                Aggregated Risk Score
-              </span>
-              <div
-                className={`text-4xl font-extrabold font-mono tracking-tight ${
-                  deviceScore >= 50 ? 'text-red-600 dark:text-red-400' : deviceScore >= 25 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
-                }`}
-              >
-                {deviceScore.toFixed(0)}
-                <span className="text-base text-slate-400 font-normal ml-1">/ 100</span>
-              </div>
-              <div className="text-[11px] font-mono text-slate-500 pt-1">
-                Asset Criticality Multiplier: <span className="text-slate-800 dark:text-slate-200 font-semibold">{selectedDevice.criticality || 1}x</span>
-              </div>
-            </div>
-
-            {/* Explainable Factor Attribution Breakdown */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs font-mono text-slate-800 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-800 pb-1.5">
-                <span>Observed Risk Factors</span>
-                <span className="text-slate-500 font-normal">Points</span>
-              </div>
-
-              {factors.length === 0 ? (
-                <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-lg text-center text-xs font-mono text-slate-500">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
-                  Zero anomalous telemetry signals detected. Asset operating in nominal adaptive baseline.
+            ) : (
+              <>
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 mb-4">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400 font-semibold block">
+                      Target Asset Analysis
+                    </span>
+                    <h3 className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                      {selectedDevice.hostname || selectedDevice.ip_address || 'Selected Device'}
+                    </h3>
+                  </div>
+                  <RiskBadge level={deviceLevel} />
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {factors.map((f, i) => (
-                    <div
-                      key={i}
-                      className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-mono"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500" />
-                        <span className="text-slate-800 dark:text-slate-200 font-medium">{f.name}</span>
-                      </div>
-                      <span className="text-red-600 dark:text-red-400 font-bold font-mono">+{f.points} pts</span>
+
+                {/* Big Risk Meter */}
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-center space-y-1 mb-4">
+                  <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest block font-semibold">
+                    Aggregated Risk Score
+                  </span>
+                  <div
+                    className={`text-4xl font-extrabold font-mono tracking-tight ${
+                      deviceScore >= 50 ? 'text-red-600 dark:text-red-400' : deviceScore >= 25 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
+                    }`}
+                  >
+                    {deviceScore.toFixed(0)}
+                    <span className="text-base text-slate-400 font-normal ml-1">/ 100</span>
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-500 pt-1">
+                    Asset Criticality Multiplier: <span className="text-slate-800 dark:text-slate-200 font-semibold">{selectedDevice.criticality || 1}x</span>
+                  </div>
+                </div>
+
+                {/* Explainable Factor Attribution Breakdown */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs font-mono text-slate-800 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-800 pb-1.5">
+                    <span>Observed Risk Factors</span>
+                    <span className="text-slate-500 font-normal">Points</span>
+                  </div>
+
+                  {factors.length === 0 ? (
+                    <div className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-lg text-center text-xs font-mono text-slate-500">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
+                      Zero anomalous telemetry signals detected. Asset operating in nominal adaptive baseline.
                     </div>
-                  ))}
+                  ) : (
+                    <div className="space-y-2">
+                      {factors.map((f, i) => (
+                        <div
+                          key={i}
+                          className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-mono"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500" />
+                            <span className="text-slate-800 dark:text-slate-200 font-medium">{f.name}</span>
+                          </div>
+                          <span className="text-red-600 dark:text-red-400 font-bold font-mono">+{f.points} pts</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* Triage Recommendation Gate */}
-            <div className="mt-5 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs font-mono space-y-1.5">
-              <div className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
-                Autonomous Triage Gate Action
-              </div>
-              <div
-                className={`p-2.5 rounded-lg border text-[11px] font-semibold flex items-center gap-2 ${
-                  deviceScore >= 50
-                    ? 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
-                    : deviceScore >= 25
-                    ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                    : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                }`}
-              >
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                <span>
-                  {deviceScore >= 50
-                    ? 'TRIGGER_PROPAGATION_ANALYSIS — Automatic Digital Twin blast-radius simulation launched.'
-                    : deviceScore >= 25
-                    ? 'FLAG_SUSPICIOUS_ALERT — Alert queued for investigation and baseline watch.'
-                    : 'LOG_ONLY — Nominal baseline activity. Continuous passive calibration.'}
-                </span>
-              </div>
-            </div>
+                {/* Triage Recommendation Gate */}
+                <div className="mt-5 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs font-mono space-y-1.5">
+                  <div className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
+                    Autonomous Triage Gate Action
+                  </div>
+                  <div
+                    className={`p-2.5 rounded-lg border text-[11px] font-semibold flex items-center gap-2 ${
+                      deviceScore >= 50
+                        ? 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
+                        : deviceScore >= 25
+                        ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                        : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                    }`}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      {deviceScore >= 50
+                        ? 'TRIGGER_PROPAGATION_ANALYSIS — Automatic Digital Twin blast-radius simulation launched.'
+                        : deviceScore >= 25
+                        ? 'FLAG_SUSPICIOUS_ALERT — Alert queued for investigation and baseline watch.'
+                        : 'LOG_ONLY — Nominal baseline activity. Continuous passive calibration.'}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
           </Card>
         </div>
       </div>

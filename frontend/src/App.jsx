@@ -1,9 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { getStatus, getNetworkInterfaces, getIncidents } from './api/client'
+import { getStatus, getNetworkInterfaces, getIncidents, getCurrentUser, logout } from './api/client'
 import { ThemeProvider } from './context/ThemeContext'
 import { TopBar } from './components/TopBar'
 import { Sidebar } from './components/Sidebar'
 import { StatusBar } from './components/StatusBar'
+import { LoginModal } from './components/LoginModal'
+import { LaunchScreen } from './components/LaunchScreen'
+import { AlertCircle, X } from 'lucide-react'
 
 import Overview from './pages/Overview'
 import Network from './pages/Network'
@@ -16,7 +19,13 @@ import RiskIntel from './pages/RiskIntel'
 import Devices from './pages/Devices'
 
 function AppContent() {
+  const [isLaunching, setIsLaunching] = useState(true)
   const [page, setPage] = useState('overview')
+  const [user, setUser] = useState(() => getCurrentUser())
+  const [loginModalOpen, setLoginModalOpen] = useState(false)
+  const [authErrorMessage, setAuthErrorMessage] = useState('')
+  const [forbiddenBanner, setForbiddenBanner] = useState('')
+
   const [status, setStatus] = useState({
     status: 'operational',
     online_devices: 0,
@@ -29,6 +38,46 @@ function AppContent() {
     is_monitoring: false,
     subnet: '192.168.0.0/24',
   })
+
+  // Listen for global auth events
+  useEffect(() => {
+    const handleAuthError = (e) => {
+      const { status: code, message } = e.detail || {}
+      if (code === 401) {
+        setUser(null)
+        setAuthErrorMessage(message || 'Session expired or authentication required. Please sign in.')
+        setLoginModalOpen(true)
+      } else if (code === 403) {
+        setForbiddenBanner(message || 'Access Forbidden: Insufficient privileges for this action.')
+      }
+    }
+
+    const handleLogin = (e) => {
+      setUser(e.detail)
+      setAuthErrorMessage('')
+      setForbiddenBanner('')
+    }
+
+    const handleLogout = () => {
+      setUser(null)
+    }
+
+    window.addEventListener('sentinel-auth-error', handleAuthError)
+    window.addEventListener('sentinel-auth-login', handleLogin)
+    window.addEventListener('sentinel-auth-logout', handleLogout)
+
+    const handleReplay = () => setIsLaunching(true)
+    window.addEventListener('sentinel-replay-launch', handleReplay)
+    window.replayLaunch = handleReplay
+
+    return () => {
+      window.removeEventListener('sentinel-auth-error', handleAuthError)
+      window.removeEventListener('sentinel-auth-login', handleLogin)
+      window.removeEventListener('sentinel-auth-logout', handleLogout)
+      window.removeEventListener('sentinel-replay-launch', handleReplay)
+      delete window.replayLaunch
+    }
+  }, [])
 
   const loadStatus = useCallback(async () => {
     try {
@@ -77,6 +126,11 @@ function AppContent() {
     return () => clearInterval(interval)
   }, [loadStatus])
 
+  const handleLogout = () => {
+    logout()
+    setUser(null)
+  }
+
   const alertCount = status.open_alerts ?? 0
   const incidentCount = status.open_incidents ?? 0
 
@@ -94,10 +148,39 @@ function AppContent() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-slate-100 dark:bg-bg-page text-slate-900 dark:text-text-primary theme-transition">
-      {/* 1. TOP EXECUTIVE BAR */}
-      <TopBar status={status} onRefresh={loadStatus} />
+      {/* 0. APPLICATION LAUNCH ANIMATION */}
+      {isLaunching && <LaunchScreen onComplete={() => setIsLaunching(false)} />}
 
-      {/* 2. BODY: SIDEBAR + MAIN CONTENT ROUTER */}
+      {/* 1. TOP EXECUTIVE BAR */}
+      <TopBar
+        status={status}
+        onRefresh={loadStatus}
+        user={user}
+        onLogout={handleLogout}
+        onOpenLogin={() => {
+          setAuthErrorMessage('')
+          setLoginModalOpen(true)
+        }}
+      />
+
+      {/* 2. FORBIDDEN BANNER (IF ANY) */}
+      {forbiddenBanner && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-2 flex items-center justify-between text-amber-600 dark:text-amber-400 text-xs">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{forbiddenBanner}</span>
+          </div>
+          <button
+            onClick={() => setForbiddenBanner('')}
+            className="p-1 hover:text-amber-800 dark:hover:text-amber-200"
+            aria-label="Dismiss banner"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* 3. BODY: SIDEBAR + MAIN CONTENT ROUTER */}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           active={page}
@@ -117,8 +200,19 @@ function AppContent() {
         </main>
       </div>
 
-      {/* 3. BOTTOM SYSTEM STATUS BAR */}
+      {/* 4. BOTTOM SYSTEM STATUS BAR */}
       <StatusBar status={status} />
+
+      {/* 5. AUTHENTICATION MODAL */}
+      <LoginModal
+        isOpen={loginModalOpen}
+        initialError={authErrorMessage}
+        onClose={() => setLoginModalOpen(false)}
+        onLoginSuccess={(data) => {
+          setUser({ username: data.username, role: data.role })
+          loadStatus()
+        }}
+      />
     </div>
   )
 }

@@ -5,6 +5,7 @@ import {
   TrendingUp,
   RefreshCw,
   Layers,
+  RotateCcw,
 } from 'lucide-react'
 import { getCyberDNAUsers, getCyberDNAProfile, getDevices } from '../api/client'
 import { Card, SectionHeader, Spinner, EmptyState } from '../components/ui/Card'
@@ -15,6 +16,7 @@ export function CyberDNA() {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [profileLoading, setProfileLoading] = useState(false)
+  const hasInitialized = React.useRef(false)
 
   // Load Entities & Devices
   const loadEntities = useCallback(async () => {
@@ -45,7 +47,8 @@ export function CyberDNA() {
 
       setEntities(combined)
 
-      if (combined.length > 0 && !selectedEntityId) {
+      if (combined.length > 0 && !hasInitialized.current) {
+        hasInitialized.current = true
         setSelectedEntityId(combined[0].entity_id || combined[0].id)
       }
     } catch (err) {
@@ -53,7 +56,12 @@ export function CyberDNA() {
     } finally {
       setLoading(false)
     }
-  }, [selectedEntityId])
+  }, [])
+
+  const handleClearView = () => {
+    setSelectedEntityId('')
+    setProfile(null)
+  }
 
   useEffect(() => {
     loadEntities()
@@ -144,13 +152,26 @@ export function CyberDNA() {
           </div>
         </div>
 
-        <button
-          onClick={loadEntities}
-          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh Baselines
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleClearView}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+            title="Clear selected entity and profile view"
+            aria-label="Clear View"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Clear View
+          </button>
+          <button
+            type="button"
+            onClick={loadEntities}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh Baselines
+          </button>
+        </div>
       </div>
 
       {/* Main Grid: Entity Selector + Profile View */}
@@ -218,6 +239,14 @@ export function CyberDNA() {
           {profileLoading ? (
             <Card>
               <Spinner message="Computing behavioral variance and drift..." />
+            </Card>
+          ) : !selectedEntityId ? (
+            <Card>
+              <EmptyState
+                icon={<Dna className="w-6 h-6 text-slate-400" />}
+                title="No Entity Selected"
+                message="Select a monitored endpoint or user profile from the list to inspect Welford statistical baselines and EWMA drift metrics."
+              />
             </Card>
           ) : !profile || !hasMetrics ? (
             <Card>

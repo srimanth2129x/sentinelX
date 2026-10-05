@@ -1,8 +1,8 @@
 import React from 'react'
-import { Shield, RefreshCw, Cpu, Server, Activity, Sun, Moon } from 'lucide-react'
+import { Shield, RefreshCw, Cpu, Server, Activity, Sun, Moon, LogIn, LogOut } from 'lucide-react'
 import { useTheme } from '../context/ThemeContext'
 
-export function TopBar({ status = {}, onRefresh, refreshing }) {
+export function TopBar({ status = {}, onRefresh, refreshing, user, onLogout, onOpenLogin }) {
   const { toggleTheme, isDark } = useTheme()
   const isOnline = status.status === 'operational' || status.backendOnline !== false
   const activeSensors = status.active_sensors ?? status.sensors_connected ?? 0
@@ -78,7 +78,7 @@ export function TopBar({ status = {}, onRefresh, refreshing }) {
         </div>
       </div>
 
-      {/* Right: Actions, Theme Switcher & Refresh */}
+      {/* Right: Actions, Theme Switcher & Authentication */}
       <div className="flex items-center gap-2">
         {/* Light / Dark Mode Toggle */}
         <button
@@ -107,12 +107,37 @@ export function TopBar({ status = {}, onRefresh, refreshing }) {
           </button>
         )}
 
-        {/* Operator Badge */}
-        <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-slate-100 dark:bg-surface-elevated border border-slate-200 dark:border-border-base text-[11px]">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          <span className="text-slate-800 dark:text-text-primary font-semibold font-mono text-[10px]">SOC OPERATOR</span>
-          <span className="text-slate-400 dark:text-text-faint text-[10px] hidden sm:inline">· AUDIT</span>
-        </div>
+        {/* User Authentication Badge & Control */}
+        {user ? (
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-slate-100 dark:bg-surface-elevated border border-slate-200 dark:border-border-base text-[11px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="text-slate-800 dark:text-text-primary font-semibold font-mono text-[10px]">
+                {user.username}
+              </span>
+              <span className="text-slate-400 dark:text-text-faint text-[10px] hidden sm:inline">
+                [{user.role}]
+              </span>
+            </div>
+            <button
+              onClick={onLogout}
+              className="p-1.5 bg-slate-100 hover:bg-rose-100 dark:bg-surface-elevated dark:hover:bg-rose-950/40 border border-slate-200 dark:border-border-base text-slate-600 hover:text-rose-600 dark:text-text-secondary dark:hover:text-rose-400 rounded transition cursor-pointer"
+              title="Sign Out"
+              aria-label="Sign Out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onOpenLogin}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-semibold transition cursor-pointer shadow-xs"
+            title="Sign In to SentinelTwin Console"
+          >
+            <LogIn className="w-3.5 h-3.5" />
+            <span>Sign In</span>
+          </button>
+        )}
       </div>
     </header>
   )

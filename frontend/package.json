@@ -13,6 +13,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "axios": "^1.19.0",
     "cytoscape": "^3.34.1",
+    "lottie-web": "^5.13.0",
     "lucide-react": "^1.31.0",
     "motion": "^13.5.0",
     "react": "^19.2.8",

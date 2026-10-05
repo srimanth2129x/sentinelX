@@ -10,6 +10,8 @@ import {
   ArrowRight,
   CheckCircle2,
   ChevronRight,
+  RotateCcw,
+  RefreshCw,
 } from 'lucide-react'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
 import { getDashboardSummary, getDevices, getEvents, getAlerts } from '../api/client'
@@ -23,6 +25,7 @@ export function Overview({ onNav }) {
   const [events, setEvents] = useState([])
   const [alerts, setAlerts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [isCleared, setIsCleared] = useState(false)
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -46,10 +49,24 @@ export function Overview({ onNav }) {
   }, [])
 
   useEffect(() => {
+    if (isCleared) return
     loadDashboard()
     const timer = setInterval(loadDashboard, 8000)
     return () => clearInterval(timer)
-  }, [loadDashboard])
+  }, [loadDashboard, isCleared])
+
+  const handleClearView = () => {
+    setIsCleared(true)
+    setSummary({})
+    setDevices([])
+    setEvents([])
+    setAlerts([])
+  }
+
+  const handleRefresh = () => {
+    setIsCleared(false)
+    loadDashboard()
+  }
 
   const handleNav = (page) => {
     if (typeof onNav === 'function') {
@@ -57,7 +74,7 @@ export function Overview({ onNav }) {
     }
   }
 
-  if (loading && !summary) {
+  if (loading && !summary && !isCleared) {
     return <Spinner message="Assembling SOC Executive Telemetry..." />
   }
 
@@ -135,10 +152,39 @@ export function Overview({ onNav }) {
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-800 dark:text-text-primary">
                 SentinelTwin Behavioral Pipeline
               </span>
+              <span className="text-[11px] text-slate-500 dark:text-text-muted hidden md:inline ml-2">
+                Observe → Understand → Detect → Score → Simulate → Respond
+              </span>
             </div>
-            <span className="text-[11px] text-slate-500 dark:text-text-muted">
-              Observe → Understand → Detect → Score → Simulate → Respond
-            </span>
+
+            <div className="flex items-center gap-2">
+              {isCleared && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 dark:bg-surface-elevated text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-border-strong font-semibold">
+                  VIEW CLEARED (POLLING PAUSED)
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleClearView}
+                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+                title="Clear locally displayed overview values and pause polling"
+                aria-label="Clear View"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Clear View
+              </button>
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={loading}
+                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+                title="Refresh and resume live telemetry polling"
+                aria-label="Refresh"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto pb-1">
@@ -490,8 +536,12 @@ export function Overview({ onNav }) {
           {recentTelemetry.length === 0 ? (
             <EmptyState
               icon={<Activity className="w-6 h-6 text-slate-400" />}
-              title="Awaiting Telemetry Ingestion"
-              message="No security events recorded yet. Connect Windows Event Sensor or run discovery."
+              title={isCleared ? 'Overview View Cleared' : 'Awaiting Telemetry Ingestion'}
+              message={
+                isCleared
+                  ? 'Locally displayed values cleared and polling paused. Press Refresh to restore live data.'
+                  : 'No security events recorded yet. Connect Windows Event Sensor or run discovery.'
+              }
             />
           ) : (
             <div className="space-y-1.5 mt-2">

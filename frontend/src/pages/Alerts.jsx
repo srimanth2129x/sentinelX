@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { BellRing, RefreshCw, Search } from 'lucide-react'
+import { BellRing, RefreshCw, Search, RotateCcw } from 'lucide-react'
 import { getAlerts } from '../api/client'
 import { Card, SectionHeader, Spinner, EmptyState } from '../components/ui/Card'
 import { RiskBadge, StatusBadge, MitreBadge } from '../components/ui/Badge'
@@ -11,6 +11,12 @@ export default function AlertsView({ onAlertChange }) {
   const [selectedAlertForEvidence, setSelectedAlertForEvidence] = useState(null)
   const [severityFilter, setSeverityFilter] = useState('ALL')
   const [searchQuery, setSearchQuery] = useState('')
+
+  const handleClearView = () => {
+    setSearchQuery('')
+    setSeverityFilter('ALL')
+    setSelectedAlertForEvidence(null)
+  }
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -74,13 +80,25 @@ export default function AlertsView({ onAlertChange }) {
           </div>
         </div>
 
-        <button
-          onClick={fetchAlerts}
-          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleClearView}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+            title="Reset active filters and detail views"
+            aria-label="Clear View"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Clear View
+          </button>
+          <button
+            onClick={fetchAlerts}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+            aria-label="Refresh alerts"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Filter Toolbar */}

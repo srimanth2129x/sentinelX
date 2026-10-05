@@ -2,6 +2,7 @@
 REST API Blueprint for SentinelTwin Security Platform
 Provides network discovery, device inventory, alerts, incidents,
 CyberDNA behavioral analytics, Digital Twin topology, attack propagation, and event ingestion.
+Enforces role-based access control (RBAC) and device sensor authentication.
 """
 import os
 import json
@@ -43,11 +44,12 @@ def _get_target_db():
 
 
 # ==========================================================
-# 1. AUTHENTICATION
+# 1. AUTHENTICATION & SESSION MANAGEMENT
 # ==========================================================
 
 @api_bp.route("/auth/login", methods=["POST", "OPTIONS"])
 def login():
+    """Authenticates console users and returns signed JWT with RBAC role."""
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
 
@@ -80,7 +82,7 @@ def login():
 
 @api_bp.route("/health", methods=["GET"])
 def health_check():
-    """Ultra-lightweight connectivity probe for sensors."""
+    """Ultra-lightweight public connectivity probe for sensors."""
     return jsonify({
         "status": "ok",
         "service": "sentineltwin",
@@ -101,13 +103,15 @@ def get_system_status():
             "memory_usage_percent": mem.percent,
             "memory_free_gb": round(mem.available / (1024 ** 3), 2),
             "sensor_connected": True,
+            "is_monitoring": discovery_manager.is_monitoring,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }), 200
     except Exception as e:
-        return jsonify({"status": "online", "error": str(e)}), 200
+        return jsonify({"status": "online", "error": str(e), "is_monitoring": False}), 200
 
 
 @api_bp.route("/network/interfaces", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
 def get_network_interfaces():
     """Returns active network adapters with IP, subnet mask, and host counts."""
     interfaces = []
@@ -147,11 +151,13 @@ def get_network_interfaces():
 
 
 # ==========================================================
-# 3. NETWORK DISCOVERY & DEVICE INVENTORY
+# 3. NETWORK DISCOVERY, MONITORING & DEVICE INVENTORY
 # ==========================================================
 
 @api_bp.route("/network/discover", methods=["POST", "OPTIONS"])
+@require_auth(allowed_roles=["Administrator"])
 def trigger_network_discover():
+    """Admin-only network discovery sweep using ARP and ICMP probes."""
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
 
@@ -178,30 +184,47 @@ def trigger_network_discover():
                     continue
 
                 dev_id = str(d.get("id") or f"dev-{ip_addr.replace('.', '-')}")
-                cur.execute("""
-                    INSERT INTO devices (
-                        id, ip_address, mac_address, hostname, vendor,
-                        device_type, os, status, first_seen, last_seen, criticality
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Online', ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        mac_address = excluded.mac_address,
-                        hostname = excluded.hostname,
-                        vendor = excluded.vendor,
-                        device_type = excluded.device_type,
-                        os = excluded.os,
-                        last_seen = excluded.last_seen,
-                        status = 'Online'
-                """, (
-                    dev_id, ip_addr, d.get("mac_address", "00:00:00:00:00:00"),
-                    d.get("hostname", "Discovered Host"), d.get("vendor", "Connected Endpoint"),
-                    d.get("device_type", "Workstation"), d.get("os", "Generic OS"),
-                    now, now, int(d.get("criticality", 1))
-                ))
+                cur.execute("SELECT id FROM devices WHERE ip_address = ? OR id = ?", (ip_addr, dev_id))
+                existing = cur.fetchone()
+                if existing:
+                    cur.execute("""
+                        UPDATE devices SET
+                            mac_address = ?,
+                            hostname = ?,
+                            vendor = ?,
+                            device_type = ?,
+                            os = ?,
+                            last_seen = ?,
+                            status = 'Online'
+                        WHERE id = ?
+                    """, (
+                        d.get("mac_address", "00:00:00:00:00:00"),
+                        d.get("hostname", "Discovered Host"),
+                        d.get("vendor", "Connected Endpoint"),
+                        d.get("device_type", "Workstation"),
+                        d.get("os", "Generic OS"),
+                        now,
+                        existing["id"]
+                    ))
+                else:
+                    cur.execute("""
+                        INSERT INTO devices (
+                            id, ip_address, mac_address, hostname, vendor,
+                            device_type, os, status, first_seen, last_seen, criticality
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Online', ?, ?, ?)
+                    """, (
+                        dev_id, ip_addr, d.get("mac_address", "00:00:00:00:00:00"),
+                        d.get("hostname", "Discovered Host"), d.get("vendor", "Connected Endpoint"),
+                        d.get("device_type", "Workstation"), d.get("os", "Generic OS"),
+                        now, now, int(d.get("criticality", 1))
+                    ))
 
             cur.execute("SELECT * FROM devices ORDER BY last_seen DESC")
             all_devices = []
             for r in cur.fetchall():
                 d_item = dict(r)
+                d_item.pop("sensor_token_hash", None)
+                d_item.pop("sensor_token", None)
                 if d_item.get("hostname") and str(d_item["hostname"]).lower().startswith("node-"):
                     d_item["hostname"] = "Workstation-" + d_item["hostname"][5:]
                 all_devices.append(d_item)
@@ -212,8 +235,55 @@ def trigger_network_discover():
         return jsonify({"error": str(e), "devices": []}), 500
 
 
+@api_bp.route("/network/monitoring/start", methods=["POST", "OPTIONS"])
+@require_auth(allowed_roles=["Administrator"])
+def start_network_monitoring():
+    """Starts background periodic network monitoring (Administrator required)."""
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+
+    data = request.get_json(silent=True) or {}
+    iface = data.get("interface") or data.get("interface_name")
+    if iface is not None and not isinstance(iface, str):
+        return jsonify({"error": "Field 'interface' must be a valid string."}), 400
+
+    raw_interval = data.get("interval", 30)
+    try:
+        interval_val = int(raw_interval)
+        if not (5 <= interval_val <= 3600):
+            raise ValueError()
+    except (ValueError, TypeError):
+        return jsonify({"error": "Field 'interval' must be an integer between 5 and 3600 seconds."}), 400
+
+    result = discovery_manager.start_monitoring(interface=iface, interval=interval_val)
+    return jsonify(result), 200
+
+
+@api_bp.route("/network/monitoring/stop", methods=["POST", "OPTIONS"])
+@require_auth(allowed_roles=["Administrator"])
+def stop_network_monitoring():
+    """Stops background network monitoring (Administrator required)."""
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+
+    result = discovery_manager.stop_monitoring()
+    return jsonify(result), 200
+
+
+@api_bp.route("/network/monitoring/status", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
+def get_network_monitoring_status():
+    """Returns live network monitoring operational status."""
+    return jsonify({
+        "is_monitoring": discovery_manager.is_monitoring,
+        "interface": getattr(discovery_manager, "monitoring_interface", None),
+        "interval": getattr(discovery_manager, "monitoring_interval", 30)
+    }), 200
+
+
 @api_bp.route("/devices", methods=["GET"])
 @api_bp.route("/network/devices", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
 def get_devices():
     """Returns all discovered network devices with dynamic transport and health computation."""
     try:
@@ -274,7 +344,6 @@ def register_sensor():
     data = request.get_json(silent=True) or {}
     device_id = str(data.get("device_id") or "").strip()
     hostname = str(data.get("hostname") or "Unknown Host").strip()
-    client_ip = request.remote_addr or "127.0.0.1"
     os_name = str(data.get("os") or "Windows").strip()
 
     if not device_id:
@@ -353,7 +422,9 @@ def register_sensor():
 
 
 @api_bp.route("/devices/<device_id>/authorize", methods=["POST", "OPTIONS"])
+@require_auth(allowed_roles=["Administrator"])
 def authorize_device(device_id):
+    """Authorizes a pending device to ingest telemetry (Administrator required)."""
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
     db_path = _get_target_db()
@@ -366,7 +437,9 @@ def authorize_device(device_id):
 
 
 @api_bp.route("/devices/<device_id>/revoke", methods=["POST", "OPTIONS"])
+@require_auth(allowed_roles=["Administrator"])
 def revoke_device(device_id):
+    """Revokes a device from ingesting telemetry (Administrator required)."""
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
     db_path = _get_target_db()
@@ -378,16 +451,13 @@ def revoke_device(device_id):
     return jsonify({"status": "REVOKED", "device_id": device_id, "message": "Device access revoked"}), 200
 
 
-@api_bp.route("/devices/<device_id>", methods=["GET", "DELETE"])
-def handle_single_device(device_id):
-    """Retrieves or removes an individual device record."""
+@api_bp.route("/devices/<device_id>", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
+def get_device_details(device_id):
+    """Retrieves an individual device record."""
     try:
         with get_conn(_get_target_db()) as conn:
             cur = conn.cursor()
-            if request.method == "DELETE":
-                cur.execute("DELETE FROM devices WHERE id = ?", (device_id,))
-                return jsonify({"status": "deleted", "id": device_id}), 200
-
             cur.execute("SELECT * FROM devices WHERE id = ?", (device_id,))
             row = cur.fetchone()
             if not row:
@@ -402,10 +472,24 @@ def handle_single_device(device_id):
         return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/devices/<device_id>", methods=["DELETE"])
+@require_auth(allowed_roles=["Administrator"])
+def delete_device(device_id):
+    """Removes an individual device record (Administrator required)."""
+    try:
+        with get_conn(_get_target_db()) as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM devices WHERE id = ?", (device_id,))
+            return jsonify({"status": "deleted", "id": device_id}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/network/clear", methods=["POST"])
 @api_bp.route("/network/devices/clear", methods=["POST"])
+@require_auth(allowed_roles=["Administrator"])
 def clear_devices():
-    """Purges all devices from the database cache."""
+    """Purges all devices from the database cache (Administrator required)."""
     try:
         with get_conn(_get_target_db()) as conn:
             conn.execute("DELETE FROM devices")
@@ -420,7 +504,9 @@ def clear_devices():
 
 @api_bp.route("/events/ingest", methods=["POST", "OPTIONS"])
 @api_bp.route("/events", methods=["POST", "OPTIONS"])
+@require_sensor_or_admin()
 def ingest_event_route():
+    """Ingests a telemetry event from a verified endpoint sensor or administrator."""
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
 
@@ -475,6 +561,7 @@ def ingest_event_route():
 
 
 @api_bp.route("/events/batch", methods=["POST", "OPTIONS"])
+@require_sensor_or_admin()
 def ingest_batch_route():
     """
     Duplicate-safe batch event ingestion for Google Drive relay and offline queue draining.
@@ -564,7 +651,9 @@ def ingest_batch_route():
 
 
 @api_bp.route("/events", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
 def get_events():
+    """Retrieves historical normalized telemetry logs."""
     limit = min(int(request.args.get("limit", 50)), 200)
     device_id = request.args.get("device_id")
     event_type = request.args.get("event_type")
@@ -573,8 +662,9 @@ def get_events():
 
 
 @api_bp.route("/events/clear", methods=["POST", "OPTIONS"])
+@require_auth(allowed_roles=["Administrator"])
 def clear_events():
-    """Purges all ingested telemetry event logs and processed batch tracking for a clean reset."""
+    """Purges all ingested telemetry event logs and processed batch tracking (Administrator required)."""
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
     try:
@@ -590,10 +680,10 @@ def clear_events():
         return jsonify({"error": str(e)}), 500
 
 
-
 @api_bp.route("/drive/sync", methods=["POST", "OPTIONS"])
+@require_auth(allowed_roles=["Administrator"])
 def trigger_drive_sync():
-    """Triggers synchronization of Google Drive fallback relay batches."""
+    """Triggers synchronization of Google Drive fallback relay batches (Administrator required)."""
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
     try:
@@ -609,6 +699,7 @@ def trigger_drive_sync():
 # ==========================================================
 
 @api_bp.route("/cyberdna/profile/<entity_id>", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
 def get_cyberdna_profile(entity_id):
     """Returns the CyberDNA behavioral baseline profile and peer comparisons."""
     profile = cyberdna_engine.get_profile(entity_id, db_path=_get_target_db())
@@ -617,6 +708,7 @@ def get_cyberdna_profile(entity_id):
 
 @api_bp.route("/cyberdna/users", methods=["GET"])
 @api_bp.route("/cyberdna/entities", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
 def get_cyberdna_entities():
     """Returns all entities with behavioral CyberDNA baselines."""
     entities = cyberdna_engine.get_all_entities(db_path=_get_target_db())
@@ -624,8 +716,9 @@ def get_cyberdna_entities():
 
 
 @api_bp.route("/cyberdna/simulate", methods=["POST", "OPTIONS"])
+@require_auth(allowed_roles=["Administrator"])
 def simulate_cyberdna():
-    """Direct testing and evaluation of CyberDNA statistical anomalies."""
+    """Direct testing and evaluation of CyberDNA statistical anomalies (Administrator required)."""
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
 
@@ -651,6 +744,7 @@ def simulate_cyberdna():
 
 @api_bp.route("/network/topology", methods=["GET"])
 @api_bp.route("/cyber_twin/topology", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
 def get_topology():
     """Returns the NetworkX Digital Twin topology graph (nodes and edges)."""
     return jsonify(get_topology_graph(_get_target_db())), 200
@@ -658,8 +752,9 @@ def get_topology():
 
 @api_bp.route("/simulation/run", methods=["POST", "OPTIONS"])
 @api_bp.route("/cyber_twin/propagate", methods=["POST", "OPTIONS"])
+@require_auth(allowed_roles=["Administrator"])
 def simulate_propagation():
-    """Executes multi-hop attack propagation simulation from a compromised entity."""
+    """Executes multi-hop attack propagation simulation from a compromised entity (Administrator required)."""
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
 
@@ -683,46 +778,38 @@ def simulate_propagation():
     return jsonify(sim_result), 200
 
 
+@api_bp.route("/simulation/results", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
+def get_simulation_results():
+    """Returns past attack propagation simulation results."""
+    try:
+        with get_conn(_get_target_db()) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM simulations ORDER BY id DESC LIMIT 10")
+            rows = [dict(r) for r in cur.fetchall()]
+            for r in rows:
+                if isinstance(r.get("results_json"), str) and r["results_json"]:
+                    try:
+                        r["results"] = json.loads(r["results_json"])
+                    except Exception:
+                        pass
+        return jsonify(rows), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ==========================================================
 # 7. ALERTS, INCIDENTS & EVIDENCE RETRIEVAL
 # ==========================================================
 
-@api_bp.route("/alerts", methods=["GET", "POST"])
-@api_bp.route("/incidents", methods=["GET", "PATCH"])
-def handle_alerts():
-    """Handles alert retrieval, manual creation, or incident status changes."""
+@api_bp.route("/alerts", methods=["GET"])
+@api_bp.route("/incidents", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
+def get_alerts_and_incidents():
+    """Retrieves recent security alerts and incidents."""
     try:
         with get_conn(_get_target_db()) as conn:
             cur = conn.cursor()
-
-            if request.method == "PATCH":
-                data = request.get_json(silent=True) or {}
-                incident_id = data.get("id")
-                new_status = data.get("status", "Resolved")
-                if incident_id:
-                    cur.execute("UPDATE alerts SET status = ? WHERE id = ?", (new_status, incident_id))
-                return jsonify({"status": "updated"}), 200
-
-            if request.method == "POST":
-                data = request.get_json(silent=True) or {}
-                device_id = data.get("device_id", "local-host")
-                title = data.get("title", "Security Threat Detected")
-                severity = data.get("severity", "HIGH")
-                status = data.get("status", "Open")
-                description = data.get("description", "")
-                created_at = data.get("created_at", datetime.now(timezone.utc).isoformat())
-                raw_risk_pts = data.get("risk_points")
-                try:
-                    risk_pts = int(raw_risk_pts) if raw_risk_pts is not None else 50
-                except (ValueError, TypeError):
-                    risk_pts = 50
-
-                cur.execute("""
-                    INSERT INTO alerts (device_id, title, severity, status, description, created_at, timestamp, risk_points)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (device_id, title, severity, status, description, created_at, created_at, risk_pts))
-                return jsonify({"status": "created", "id": cur.lastrowid}), 201
-
             cur.execute("SELECT * FROM alerts ORDER BY id DESC LIMIT 100")
             rows = [dict(row) for row in cur.fetchall()]
             for r in rows:
@@ -736,7 +823,81 @@ def handle_alerts():
         return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/incidents/<int:incident_id>", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
+def get_single_incident(incident_id):
+    """Retrieves a specific incident record."""
+    try:
+        with get_conn(_get_target_db()) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM alerts WHERE id = ?", (incident_id,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"error": "Incident not found"}), 404
+            inc = dict(row)
+            if isinstance(inc.get("evidence_graph"), str) and inc["evidence_graph"]:
+                try:
+                    inc["evidence_graph"] = json.loads(inc["evidence_graph"])
+                except Exception:
+                    pass
+            return jsonify(inc), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/alerts", methods=["POST"])
+@require_auth(allowed_roles=["Administrator"])
+def create_manual_alert():
+    """Creates a security alert record manually (Administrator required)."""
+    try:
+        data = request.get_json(silent=True) or {}
+        device_id = data.get("device_id", "local-host")
+        title = data.get("title", "Security Threat Detected")
+        severity = data.get("severity", "HIGH")
+        status = data.get("status", "Open")
+        description = data.get("description", "")
+        created_at = data.get("created_at", datetime.now(timezone.utc).isoformat())
+        raw_risk_pts = data.get("risk_points")
+        try:
+            risk_pts = int(raw_risk_pts) if raw_risk_pts is not None else 50
+        except (ValueError, TypeError):
+            risk_pts = 50
+
+        with get_conn(_get_target_db()) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO alerts (device_id, title, severity, status, description, created_at, timestamp, risk_points)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (device_id, title, severity, status, description, created_at, created_at, risk_pts))
+            return jsonify({"status": "created", "id": cur.lastrowid}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/incidents", methods=["PATCH"])
+@api_bp.route("/incidents/<int:incident_id>", methods=["PATCH"])
+@api_bp.route("/alerts/<int:alert_id>", methods=["PATCH"])
+@require_auth(allowed_roles=["Administrator"])
+def update_incident_status(incident_id=None, alert_id=None):
+    """Updates the status of an incident or alert (Administrator required)."""
+    try:
+        target_id = incident_id or alert_id
+        data = request.get_json(silent=True) or {}
+        if not target_id:
+            target_id = data.get("id")
+        if not target_id:
+            return jsonify({"error": "Missing incident or alert ID"}), 400
+
+        new_status = data.get("status", "Resolved")
+        with get_conn(_get_target_db()) as conn:
+            conn.execute("UPDATE alerts SET status = ? WHERE id = ?", (new_status, target_id))
+        return jsonify({"status": "updated", "id": target_id, "new_status": new_status}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/alerts/<alert_id>/evidence", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
 def get_alert_evidence(alert_id):
     """Retrieves the deterministic Evidence Graph for an alert."""
     try:
@@ -775,6 +936,7 @@ def get_alert_evidence(alert_id):
 # ==========================================================
 
 @api_bp.route("/dashboard/summary", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
 def get_dashboard_summary():
     """Provides high-level dashboard aggregate metrics."""
     with get_conn(_get_target_db()) as conn:
@@ -810,6 +972,7 @@ def get_dashboard_summary():
 
 
 @api_bp.route("/risk/summary", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
 def get_risk_summary():
     """Aggregates platform risk metrics."""
     try:
@@ -841,6 +1004,7 @@ def get_risk_summary():
 
 
 @api_bp.route("/risk/devices", methods=["GET"])
+@require_auth(allowed_roles=["Administrator", "Viewer"])
 def get_device_risk_breakdown():
     """Returns risk assessment breakdown per device."""
     try:

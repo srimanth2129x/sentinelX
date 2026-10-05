@@ -1,6 +1,8 @@
 import axios from 'axios'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+const TOKEN_STORAGE_KEY = 'sentinel_auth_token'
+const USER_STORAGE_KEY = 'sentinel_auth_user'
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -9,35 +11,138 @@ export const api = axios.create({
   },
 })
 
-// System Status & Health Check
+// --- Session & Token Management ---
+
+export function getAuthToken() {
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY) || null
+  } catch {
+    return null
+  }
+}
+
+export function getCurrentUser() {
+  try {
+    const raw = localStorage.getItem(USER_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+export function setAuthSession(token, user) {
+  try {
+    if (token) {
+      localStorage.setItem(TOKEN_STORAGE_KEY, token)
+    }
+    if (user) {
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user))
+    }
+  } catch (err) {
+    console.warn('Failed to persist auth session to localStorage:', err)
+  }
+}
+
+export function clearAuthSession() {
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY)
+    localStorage.removeItem(USER_STORAGE_KEY)
+  } catch (err) {
+    console.warn('Failed to clear auth session from localStorage:', err)
+  }
+}
+
+export function isAuthenticated() {
+  return Boolean(getAuthToken())
+}
+
+// Request Interceptor: Attach JWT Bearer token
+api.interceptors.request.use((config) => {
+  const token = getAuthToken()
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+}, (error) => Promise.reject(error))
+
+// Response Interceptor: Handle 401 Unauthorized and 403 Forbidden
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status
+    const message = error.response?.data?.error || error.message
+
+    if (status === 401) {
+      // Clear expired / invalid token
+      clearAuthSession()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sentinel-auth-error', {
+          detail: { status: 401, message: message || 'Authentication required or session expired.' }
+        }))
+      }
+    } else if (status === 403) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sentinel-auth-error', {
+          detail: { status: 403, message: message || 'Access forbidden: Insufficient privileges.' }
+        }))
+      }
+    }
+
+    return Promise.reject(error)
+  }
+)
+
+// --- Authentication Endpoints ---
+
+export async function login(username, password) {
+  const res = await api.post('/auth/login', { username, password })
+  if (res.data?.token) {
+    const user = { username: res.data.username || username, role: res.data.role || 'Administrator' }
+    setAuthSession(res.data.token, user)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sentinel-auth-login', { detail: user }))
+    }
+  }
+  return res.data
+}
+
+export function logout() {
+  clearAuthSession()
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('sentinel-auth-logout'))
+  }
+}
+
+// --- System Status & Health Check ---
 export const getStatus = () => api.get('/system/status')
 export const getSystemStatus = () => api.get('/system/status')
-export const getHealth = () => api.get('/system/status')
+export const getHealth = () => api.get('/health')
 
-// Dashboard Aggregates
+// --- Dashboard Aggregates ---
 export const getDashboardSummary = () => api.get('/dashboard/summary')
 export const getDashboard = () => api.get('/dashboard/summary')
 
-// Network Discovery & Interfaces
+// --- Network Discovery, Monitoring & Interfaces ---
 export const getNetworkInterfaces = () => api.get('/network/interfaces')
 export const getDiscoveredDevices = () => api.get('/network/devices')
 export const triggerDiscovery = (data) => api.post('/network/discover', data)
 export const startMonitoring = (data) => api.post('/network/monitoring/start', data)
 export const stopMonitoring = () => api.post('/network/monitoring/stop')
+export const getMonitoringStatus = () => api.get('/network/monitoring/status')
 export const clearDiscoveredDevices = () => api.post('/network/devices/clear')
 
-// Cyber Twin Topology & Simulations
+// --- Cyber Twin Topology & Simulations ---
 export const getTopology = () => api.get('/network/topology')
 export const runSimulation = (data) => api.post('/simulation/run', data)
 export const getSimulationResults = () => api.get('/simulation/results')
 
-// CyberDNA & Behavioral Analytics
+// --- CyberDNA & Behavioral Analytics ---
 export const getCyberDNAUsers = () => api.get('/cyberdna/users')
 export const getCyberDNAUser = (userId) => api.get(`/cyberdna/profile/${userId}`)
 export const getCyberDNAProfile = (userId) => api.get(`/cyberdna/profile/${userId}`)
 export const getCyberDNABaselines = (userId) => api.get(`/cyberdna/profile/${userId}`)
 
-// Events, Alerts & Incidents
+// --- Events, Alerts & Incidents ---
 export const getEvents = (params) => api.get('/events', { params })
 export const clearEvents = () => api.post('/events/clear')
 export const getAlerts = (params) => api.get('/alerts', { params })
@@ -47,7 +152,7 @@ export const getIncident = (incidentId) => api.get(`/incidents/${incidentId}`)
 export const createIncident = (data) => api.post('/incidents', data)
 export const updateIncident = (incidentId, data) => api.patch(`/incidents/${incidentId}`, data)
 
-// Device Risk & Inventory
+// --- Device Risk & Inventory ---
 export const getRiskSummary = () => api.get('/risk/summary')
 export const getRiskDevices = () => api.get('/risk/devices')
 export const getDevices = (params) => api.get('/devices', { params })

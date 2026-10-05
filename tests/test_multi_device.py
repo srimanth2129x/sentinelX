@@ -24,6 +24,7 @@ import pytest
 from backend.app import create_app
 from backend.database.db import get_conn, init_db
 from backend.config import config
+from backend.api.auth import generate_jwt
 from backend.services.drive_sync import drive_sync_manager
 from sensor.windows_sensor import (
     write_crash_safe_drive_batch,
@@ -129,7 +130,8 @@ def test_b_lan_registration_and_gating(multi_device_env):
     assert blocked_res.status_code == 403
 
     # 3. Administrator explicitly authorizes the device
-    auth_res = client.post("/api/devices/ST-LAN-01/authorize")
+    admin_token = generate_jwt(1, "admin", "Administrator")
+    auth_res = client.post("/api/devices/ST-LAN-01/authorize", headers={"Authorization": f"Bearer {admin_token}"})
     assert auth_res.status_code == 200
     assert auth_res.get_json()["status"] == "AUTHORIZED"
 
@@ -396,14 +398,16 @@ def test_i_authorization_lifecycle(multi_device_env):
     assert r_blocked.status_code == 403
 
     # 3. Admin authorizes -> 200
-    client.post(f"/api/devices/{device_id}/authorize")
+    admin_token = generate_jwt(1, "admin", "Administrator")
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    client.post(f"/api/devices/{device_id}/authorize", headers=admin_headers)
 
     # 4. Telemetry accepted -> 201
     r_ok = client.post("/api/events", json=ev, headers={"X-Sensor-Token": token, "X-Device-Id": device_id})
     assert r_ok.status_code == 201
 
     # 5. Admin revokes -> 200
-    client.post(f"/api/devices/{device_id}/revoke")
+    client.post(f"/api/devices/{device_id}/revoke", headers=admin_headers)
 
     # 6. Telemetry rejected -> 403
     ev2 = {"device_id": device_id, "channel": "Security", "event_id": 4624, "record_id": 7002}
@@ -411,7 +415,7 @@ def test_i_authorization_lifecycle(multi_device_env):
     assert r_revoked.status_code == 403
 
     # 7. Admin re-authorizes -> 200
-    client.post(f"/api/devices/{device_id}/authorize")
+    client.post(f"/api/devices/{device_id}/authorize", headers=admin_headers)
     r_reok = client.post("/api/events", json=ev2, headers={"X-Sensor-Token": token, "X-Device-Id": device_id})
     assert r_reok.status_code == 201
 
@@ -438,7 +442,8 @@ def test_j_dynamic_offline_detection(multi_device_env):
         """, (stale_time,))
 
     # Query /api/devices
-    res = client.get("/api/devices")
+    admin_token = generate_jwt(1, "admin", "Administrator")
+    res = client.get("/api/devices", headers={"Authorization": f"Bearer {admin_token}"})
     assert res.status_code == 200
     devices = {d["id"]: d for d in res.get_json()}
 

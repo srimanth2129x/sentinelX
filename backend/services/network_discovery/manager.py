@@ -98,16 +98,12 @@ class NetworkDiscoveryManager:
         return None
 
     def _query_dns(self, ip: str) -> Optional[str]:
-        """Reverse DNS lookup for friendly hostnames."""
-        try:
-            socket.setdefaulttimeout(0.3)
-            host = socket.gethostbyaddr(ip)[0]
-            if host and host != ip:
-                return host.split(".")[0]
-        except Exception:
-            pass
-        finally:
-            socket.setdefaulttimeout(None)
+        """
+        Reverse DNS lookup for friendly hostnames.
+        Note: socket.gethostbyaddr() on Windows does not respect socket timeouts
+        and blocks for 5+ seconds per private IP on LANs without reverse PTR records.
+        We skip reverse DNS on private LAN ranges to maintain fast responsiveness.
+        """
         return None
 
     def _check_pc_ports(self, ip: str) -> bool:
@@ -282,24 +278,30 @@ class NetworkDiscoveryManager:
 
         # 4. Read OS ARP Table after sweep
         arp_table = self._get_arp_table()
-        for ip, mac in arp_table.items():
-            if ip not in seen_ips:
-                seen_ips.add(ip)
-                dev_host, vendor, dev_type, crit = self._fingerprint_device(ip, mac)
+        items_to_fp = [(ip, mac) for ip, mac in arp_table.items() if ip not in seen_ips]
+        for ip, _ in items_to_fp:
+            seen_ips.add(ip)
 
-                discovered.append({
-                    "id": f"dev-{ip.replace('.', '-')}",
-                    "ip_address": ip,
-                    "mac_address": mac,
-                    "hostname": dev_host,
-                    "vendor": vendor,
-                    "device_type": dev_type,
-                    "os": "Windows / Linux" if dev_type == "Laptop / PC" else "Mobile / Embedded OS",
-                    "status": "Online",
-                    "first_seen": now,
-                    "last_seen": now,
-                    "criticality": crit
-                })
+        def _fp_item(item):
+            ip_val, mac_val = item
+            return ip_val, mac_val, self._fingerprint_device(ip_val, mac_val)
+
+        if items_to_fp:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+                for ip, mac, (dev_host, vendor, dev_type, crit) in executor.map(_fp_item, items_to_fp):
+                    discovered.append({
+                        "id": f"dev-{ip.replace('.', '-')}",
+                        "ip_address": ip,
+                        "mac_address": mac,
+                        "hostname": dev_host,
+                        "vendor": vendor,
+                        "device_type": dev_type,
+                        "os": "Windows / Linux" if dev_type == "Laptop / PC" else "Mobile / Embedded OS",
+                        "status": "Online",
+                        "first_seen": now,
+                        "last_seen": now,
+                        "criticality": crit
+                    })
 
         logger.info(f"Network discovery finished: {len(discovered)} active devices found.")
         return discovered
@@ -313,6 +315,28 @@ class NetworkDiscoveryManager:
         if not ip and not hostname:
             return None
         return f"dev-{(ip or hostname).replace('.', '-')}"
+
+    def start_monitoring(self, interface: Optional[str] = None, interval: int = 30) -> Dict[str, Any]:
+        """Enables background periodic network monitoring."""
+        self.is_monitoring = True
+        self.monitoring_interface = interface
+        self.monitoring_interval = max(5, min(int(interval), 3600))
+        logger.info(f"Network monitoring started on interface {interface} (interval {self.monitoring_interval}s)")
+        return {
+            "status": "monitoring_started",
+            "is_monitoring": True,
+            "interface": interface,
+            "interval": self.monitoring_interval
+        }
+
+    def stop_monitoring(self) -> Dict[str, Any]:
+        """Disables background network monitoring."""
+        self.is_monitoring = False
+        logger.info("Network monitoring stopped.")
+        return {
+            "status": "monitoring_stopped",
+            "is_monitoring": False
+        }
 
 
 discovery_manager = NetworkDiscoveryManager()

@@ -27,6 +27,7 @@ export function CyberTwin() {
   const [simulating, setSimulating] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [activeTab, setActiveTab] = useState('topology') // 'topology' | 'attackpath' | 'simulation'
+  const hasInitialized = React.useRef(false)
 
   const fetchTopologyData = useCallback(async () => {
     try {
@@ -70,7 +71,8 @@ export function CyberTwin() {
       setNodes(safeNodes)
       setEdges(safeEdges)
 
-      if (safeNodes.length > 0 && !selectedNode) {
+      if (safeNodes.length > 0 && !hasInitialized.current) {
+        hasInitialized.current = true
         setSelectedNode(safeNodes[0])
         setSimSource(safeNodes[0].id || '')
       }
@@ -79,7 +81,16 @@ export function CyberTwin() {
     } finally {
       setLoading(false)
     }
-  }, [selectedNode])
+  }, [])
+
+  const handleClearView = () => {
+    setSimResults(null)
+    setSelectedNode(null)
+    setSimSource('')
+    setZoom(1)
+    setActiveTab('topology')
+    setDrawerOpen(true)
+  }
 
   useEffect(() => {
     fetchTopologyData()
@@ -202,6 +213,17 @@ export function CyberTwin() {
             title="Reset Canvas"
           >
             <Maximize2 className="w-4 h-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={handleClearView}
+            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+            title="Clear simulation results and reset view state"
+            aria-label="Clear View"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Clear View
           </button>
         </div>
       </div>
