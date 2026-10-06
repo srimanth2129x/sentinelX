@@ -76,6 +76,7 @@ export function LaunchScreen({ onComplete }) {
             hideOnTransparent: true,
           },
         })
+        window.__sentinelLaunchAnim = animRef.current
 
         animRef.current.addEventListener('complete', () => {
           handleComplete()
@@ -98,6 +99,7 @@ export function LaunchScreen({ onComplete }) {
       isMounted = false
       clearTimeout(fallbackTimer)
       clearTimeout(fadeTriggerTimer)
+      delete window.__sentinelLaunchAnim
       if (animRef.current) {
         try {
           animRef.current.destroy()

@@ -228,14 +228,14 @@ class NetworkDiscoveryManager:
         except Exception as e:
             logger.warning(f"Subnet ping sweep encountered: {e}")
 
-    def scan_network(self, interface_ip: str = None, subnet: str = None) -> list:
+    def scan_network_stream(self, interface_ip: str = None, subnet: str = None):
         """
-        Discovers all devices on the network:
-        1. Identifies the local machine IP & active subnet
-        2. Conducts a fast ping sweep to populate the Windows ARP table
-        3. Parses the ARP cache and fingerprints all discovered devices
+        Discovers all devices on the network progressively and yields them one-by-one:
+        1. Identifies the local machine IP and yields the local device immediately (<5ms)
+        2. Reads existing OS ARP cache and yields already active devices one-by-one (~50-150ms)
+        3. Conducts concurrent ping sweeps across the subnet, yielding newly responding
+           devices as soon as they appear in the ARP table.
         """
-        discovered = []
         now = datetime.now(timezone.utc).isoformat()
         seen_ips = set()
 
@@ -249,10 +249,10 @@ class NetworkDiscoveryManager:
         except Exception:
             local_ip = interface_ip or "192.168.1.100"
 
-        # 2. Add This Local Device First
+        # 2. Add and yield This Local Device First (Phase A: <5ms)
         target_ip = interface_ip or local_ip
         seen_ips.add(target_ip)
-        discovered.append({
+        yield {
             "id": f"dev-{target_ip.replace('.', '-')}",
             "ip_address": target_ip,
             "mac_address": "00:50:56:C0:00:01",
@@ -264,9 +264,29 @@ class NetworkDiscoveryManager:
             "first_seen": now,
             "last_seen": now,
             "criticality": 3
-        })
+        }
 
-        # 3. Trigger Subnet Ping Sweep to populate ARP cache
+        # 3. Read and yield current OS ARP Table (Phase B: 10-150ms)
+        arp_table = self._get_arp_table()
+        for ip, mac in list(arp_table.items()):
+            if ip not in seen_ips:
+                seen_ips.add(ip)
+                dev_host, vendor, dev_type, crit = self._fingerprint_device(ip, mac)
+                yield {
+                    "id": f"dev-{ip.replace('.', '-')}",
+                    "ip_address": ip,
+                    "mac_address": mac,
+                    "hostname": dev_host,
+                    "vendor": vendor,
+                    "device_type": dev_type,
+                    "os": "Windows / Linux" if dev_type == "Laptop / PC" else "Mobile / Embedded OS",
+                    "status": "Online",
+                    "first_seen": now,
+                    "last_seen": now,
+                    "criticality": crit
+                }
+
+        # 4. Phase C: Ping sweep across remaining subnet hosts to populate dormant ARP entries
         base_prefix = None
         if target_ip and "." in target_ip and not target_ip.startswith("127."):
             base_prefix = target_ip.rsplit(".", 1)[0]
@@ -274,35 +294,51 @@ class NetworkDiscoveryManager:
             base_prefix = subnet.split("/")[0].rsplit(".", 1)[0]
 
         if base_prefix:
-            self._ping_sweep(base_prefix)
+            unseen_hosts = [f"{base_prefix}.{i}" for i in range(1, 255) if f"{base_prefix}.{i}" not in seen_ips]
 
-        # 4. Read OS ARP Table after sweep
-        arp_table = self._get_arp_table()
-        items_to_fp = [(ip, mac) for ip, mac in arp_table.items() if ip not in seen_ips]
-        for ip, _ in items_to_fp:
-            seen_ips.add(ip)
+            def _ping_single(target_ip: str):
+                try:
+                    if platform.system() == "Windows":
+                        cmd = ["ping", "-n", "1", "-w", "150", target_ip]
+                    else:
+                        cmd = ["ping", "-c", "1", "-W", "1", target_ip]
+                    res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=0.3)
+                    return target_ip, (res.returncode == 0)
+                except Exception:
+                    return target_ip, False
 
-        def _fp_item(item):
-            ip_val, mac_val = item
-            return ip_val, mac_val, self._fingerprint_device(ip_val, mac_val)
+            batch_size = 32
+            for i in range(0, len(unseen_hosts), batch_size):
+                batch = unseen_hosts[i:i + batch_size]
+                try:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
+                        list(executor.map(_ping_single, batch))
+                except Exception as e:
+                    logger.warning(f"Batch ping error: {e}")
 
-        if items_to_fp:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-                for ip, mac, (dev_host, vendor, dev_type, crit) in executor.map(_fp_item, items_to_fp):
-                    discovered.append({
-                        "id": f"dev-{ip.replace('.', '-')}",
-                        "ip_address": ip,
-                        "mac_address": mac,
-                        "hostname": dev_host,
-                        "vendor": vendor,
-                        "device_type": dev_type,
-                        "os": "Windows / Linux" if dev_type == "Laptop / PC" else "Mobile / Embedded OS",
-                        "status": "Online",
-                        "first_seen": now,
-                        "last_seen": now,
-                        "criticality": crit
-                    })
+                # After each batch, harvest newly populated ARP entries
+                refreshed_arp = self._get_arp_table()
+                for ip, mac in refreshed_arp.items():
+                    if ip not in seen_ips:
+                        seen_ips.add(ip)
+                        dev_host, vendor, dev_type, crit = self._fingerprint_device(ip, mac)
+                        yield {
+                            "id": f"dev-{ip.replace('.', '-')}",
+                            "ip_address": ip,
+                            "mac_address": mac,
+                            "hostname": dev_host,
+                            "vendor": vendor,
+                            "device_type": dev_type,
+                            "os": "Windows / Linux" if dev_type == "Laptop / PC" else "Mobile / Embedded OS",
+                            "status": "Online",
+                            "first_seen": now,
+                            "last_seen": now,
+                            "criticality": crit
+                        }
 
+    def scan_network(self, interface_ip: str = None, subnet: str = None) -> list:
+        """Discovers all devices on the network as a list."""
+        discovered = list(self.scan_network_stream(interface_ip=interface_ip, subnet=subnet))
         logger.info(f"Network discovery finished: {len(discovered)} active devices found.")
         return discovered
 

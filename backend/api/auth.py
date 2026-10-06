@@ -40,10 +40,14 @@ def require_auth(allowed_roles=None):
                 return f(*args, **kwargs)
 
             auth_header = request.headers.get("Authorization")
-            if not auth_header or not auth_header.startswith("Bearer "):
-                return jsonify({"error": "Unauthorized: Missing or malformed Authorization header"}), 401
+            token = None
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.split(" ", 1)[1].strip()
+            elif request.args.get("token"):
+                token = request.args.get("token").strip()
 
-            token = auth_header.split(" ", 1)[1].strip()
+            if not token:
+                return jsonify({"error": "Unauthorized: Missing or malformed Authorization header"}), 401
             try:
                 payload = jwt.decode(token, config.SECRET_KEY, algorithms=["HS256"])
                 request.current_user = payload

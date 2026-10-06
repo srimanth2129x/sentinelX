@@ -74,6 +74,7 @@ def test_unauthenticated_requests_rejected(auth_test_env):
         "/api/network/interfaces",
         "/api/simulation/results",
         "/api/network/monitoring/status",
+        "/api/network/discover/stream",
     ]
 
     for route in protected_get_routes:
@@ -173,6 +174,10 @@ def test_viewer_access_is_limited_to_read_only(auth_test_env):
     # Forbidden delete
     res_del = client.delete("/api/devices/DEV-001", headers=viewer_headers)
     assert res_del.status_code == 403
+
+    # Forbidden stream (requires Administrator)
+    res_stream = client.get("/api/network/discover/stream", headers=viewer_headers)
+    assert res_stream.status_code == 403
 
 
 def test_sensor_token_cannot_impersonate_another_device(auth_test_env):
@@ -340,3 +345,16 @@ def test_incident_status_update_and_retrieval(auth_test_env):
     res_get_updated = client.get("/api/incidents/901", headers=viewer_headers)
     assert res_get_updated.status_code == 200
     assert res_get_updated.get_json()["status"] == "Resolved"
+
+
+def test_network_discover_stream_admin(auth_test_env):
+    """Verifies that an Admin can stream progressive device discoveries via SSE."""
+    client = auth_test_env["client"]
+    admin_headers = auth_test_env["admin_headers"]
+
+    res = client.get("/api/network/discover/stream?interface_ip=127.0.0.1", headers=admin_headers)
+    assert res.status_code == 200
+    assert "text/event-stream" in res.content_type
+    data = res.get_data(as_text=True)
+    assert "data: " in data
+    assert '"type":' in data

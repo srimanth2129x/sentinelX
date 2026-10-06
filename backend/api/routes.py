@@ -12,7 +12,7 @@ import time
 import traceback
 import psutil
 from datetime import datetime, timezone
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, Response
 from werkzeug.security import check_password_hash
 
 from backend.config import config
@@ -154,10 +154,69 @@ def get_network_interfaces():
 # 3. NETWORK DISCOVERY, MONITORING & DEVICE INVENTORY
 # ==========================================================
 
+def _upsert_single_device(conn, d: dict, now: str) -> dict:
+    """Inserts or updates a single discovered device in SQLite."""
+    ip_addr = str(d.get("ip_address", "")).strip()
+    if not ip_addr:
+        return None
+    dev_id = str(d.get("id") or f"dev-{ip_addr.replace('.', '-')}")
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM devices WHERE ip_address = ? OR id = ?", (ip_addr, dev_id))
+    existing = cur.fetchone()
+    if existing:
+        cur.execute("""
+            UPDATE devices SET
+                mac_address = ?,
+                hostname = ?,
+                vendor = ?,
+                device_type = ?,
+                os = ?,
+                last_seen = ?,
+                status = 'Online'
+            WHERE id = ?
+        """, (
+            d.get("mac_address", "00:00:00:00:00:00"),
+            d.get("hostname", "Discovered Host"),
+            d.get("vendor", "Connected Endpoint"),
+            d.get("device_type", "Workstation"),
+            d.get("os", "Generic OS"),
+            now,
+            existing["id"]
+        ))
+        target_id = existing["id"]
+    else:
+        cur.execute("""
+            INSERT INTO devices (
+                id, ip_address, mac_address, hostname, vendor,
+                device_type, os, status, first_seen, last_seen, criticality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Online', ?, ?, ?)
+        """, (
+            dev_id, ip_addr, d.get("mac_address", "00:00:00:00:00:00"),
+            d.get("hostname", "Discovered Host"), d.get("vendor", "Connected Endpoint"),
+            d.get("device_type", "Workstation"), d.get("os", "Generic OS"),
+            now, now, int(d.get("criticality", 1))
+        ))
+        target_id = dev_id
+
+    return {
+        "id": target_id,
+        "ip_address": ip_addr,
+        "mac_address": d.get("mac_address", "00:00:00:00:00:00"),
+        "hostname": d.get("hostname", "Discovered Host"),
+        "vendor": d.get("vendor", "Connected Endpoint"),
+        "device_type": d.get("device_type", "Workstation"),
+        "os": d.get("os", "Generic OS"),
+        "status": "Online",
+        "first_seen": now,
+        "last_seen": now,
+        "criticality": int(d.get("criticality", 1))
+    }
+
+
 @api_bp.route("/network/discover", methods=["POST", "OPTIONS"])
 @require_auth(allowed_roles=["Administrator"])
 def trigger_network_discover():
-    """Admin-only network discovery sweep using ARP and ICMP probes."""
+    """Admin-only network discovery sweep using progressive ARP and ICMP probes."""
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
 
@@ -166,59 +225,17 @@ def trigger_network_discover():
     subnet = data.get("subnet")
 
     try:
-        devices = []
-        try:
-            devices = discovery_manager.scan_network(interface_ip=interface_ip, subnet=subnet)
-        except Exception:
-            try:
-                devices = discovery_manager.get_arp_table_devices()
-            except Exception:
-                devices = []
-
         now = datetime.now(timezone.utc).isoformat()
-        with get_conn(_get_target_db()) as conn:
+        db_path = _get_target_db()
+        discovered_count = 0
+
+        with get_conn(db_path) as conn:
+            for d in discovery_manager.scan_network_stream(interface_ip=interface_ip, subnet=subnet):
+                _upsert_single_device(conn, d, now)
+                discovered_count += 1
+            conn.commit()
+
             cur = conn.cursor()
-            for d in devices:
-                ip_addr = str(d.get("ip_address", "")).strip()
-                if not ip_addr:
-                    continue
-
-                dev_id = str(d.get("id") or f"dev-{ip_addr.replace('.', '-')}")
-                cur.execute("SELECT id FROM devices WHERE ip_address = ? OR id = ?", (ip_addr, dev_id))
-                existing = cur.fetchone()
-                if existing:
-                    cur.execute("""
-                        UPDATE devices SET
-                            mac_address = ?,
-                            hostname = ?,
-                            vendor = ?,
-                            device_type = ?,
-                            os = ?,
-                            last_seen = ?,
-                            status = 'Online'
-                        WHERE id = ?
-                    """, (
-                        d.get("mac_address", "00:00:00:00:00:00"),
-                        d.get("hostname", "Discovered Host"),
-                        d.get("vendor", "Connected Endpoint"),
-                        d.get("device_type", "Workstation"),
-                        d.get("os", "Generic OS"),
-                        now,
-                        existing["id"]
-                    ))
-                else:
-                    cur.execute("""
-                        INSERT INTO devices (
-                            id, ip_address, mac_address, hostname, vendor,
-                            device_type, os, status, first_seen, last_seen, criticality
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'Online', ?, ?, ?)
-                    """, (
-                        dev_id, ip_addr, d.get("mac_address", "00:00:00:00:00:00"),
-                        d.get("hostname", "Discovered Host"), d.get("vendor", "Connected Endpoint"),
-                        d.get("device_type", "Workstation"), d.get("os", "Generic OS"),
-                        now, now, int(d.get("criticality", 1))
-                    ))
-
             cur.execute("SELECT * FROM devices ORDER BY last_seen DESC")
             all_devices = []
             for r in cur.fetchall():
@@ -229,10 +246,55 @@ def trigger_network_discover():
                     d_item["hostname"] = "Workstation-" + d_item["hostname"][5:]
                 all_devices.append(d_item)
 
-        return jsonify({"discovered": len(devices), "devices": all_devices}), 200
+        return jsonify({"discovered": discovered_count, "devices": all_devices}), 200
     except Exception as e:
         logger.error(f"Network discovery error: {e}")
         return jsonify({"error": str(e), "devices": []}), 500
+
+
+@api_bp.route("/network/discover/stream", methods=["GET"])
+@require_auth(allowed_roles=["Administrator"])
+def stream_network_discover():
+    """
+    Real-time SSE stream yielding discovered devices one-by-one as soon as detected.
+    Each device is saved to SQLite immediately and sent across the wire.
+    """
+    interface_ip = request.args.get("interface_ip")
+    subnet = request.args.get("subnet")
+    db_path = _get_target_db()
+
+    def generate():
+        now = datetime.now(timezone.utc).isoformat()
+        count = 0
+        try:
+            with get_conn(db_path) as conn:
+                for dev in discovery_manager.scan_network_stream(interface_ip=interface_ip, subnet=subnet):
+                    saved_dev = _upsert_single_device(conn, dev, now)
+                    conn.commit()
+                    count += 1
+                    payload = json.dumps({
+                        "type": "device",
+                        "device": saved_dev or dev,
+                        "count": count
+                    })
+                    yield f"data: {payload}\n\n"
+
+            complete_payload = json.dumps({"type": "complete", "total": count})
+            yield f"data: {complete_payload}\n\n"
+        except Exception as e:
+            logger.error(f"Streaming network discovery error: {e}")
+            err_payload = json.dumps({"type": "error", "error": str(e)})
+            yield f"data: {err_payload}\n\n"
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive"
+        }
+    )
 
 
 @api_bp.route("/network/monitoring/start", methods=["POST", "OPTIONS"])

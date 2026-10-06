@@ -126,6 +126,61 @@ export const getDashboard = () => api.get('/dashboard/summary')
 export const getNetworkInterfaces = () => api.get('/network/interfaces')
 export const getDiscoveredDevices = () => api.get('/network/devices')
 export const triggerDiscovery = (data) => api.post('/network/discover', data)
+
+export function streamDiscovery({ interface_ip, subnet, onDevice, onComplete, onError, signal }) {
+  const token = getAuthToken()
+  const params = new URLSearchParams()
+  if (interface_ip) params.set('interface_ip', interface_ip)
+  if (subnet) params.set('subnet', subnet)
+  if (token) params.set('token', token)
+
+  const url = `${API_BASE_URL}/network/discover/stream?${params.toString()}`
+  const headers = { Accept: 'text/event-stream' }
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  fetch(url, { headers, signal })
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Streaming failed: HTTP ${response.status}`)
+      }
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop()
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed.startsWith('data:')) continue
+          const rawJson = trimmed.slice(5).trim()
+          if (!rawJson) continue
+          try {
+            const data = JSON.parse(rawJson)
+            if (data.type === 'device' && onDevice) {
+              onDevice(data.device, data.count)
+            } else if (data.type === 'complete' && onComplete) {
+              onComplete(data.total)
+            } else if (data.type === 'error' && onError) {
+              onError(new Error(data.error))
+            }
+          } catch (e) {
+            console.debug('Failed to parse SSE event:', e)
+          }
+        }
+      }
+      if (onComplete) onComplete()
+    })
+    .catch((err) => {
+      if (err.name === 'AbortError') return
+      if (onError) onError(err)
+    })
+}
+
 export const startMonitoring = (data) => api.post('/network/monitoring/start', data)
 export const stopMonitoring = () => api.post('/network/monitoring/stop')
 export const getMonitoringStatus = () => api.get('/network/monitoring/status')

@@ -10,6 +10,7 @@ import {
   getNetworkInterfaces,
   getDiscoveredDevices,
   triggerDiscovery,
+  streamDiscovery,
   startMonitoring,
   stopMonitoring,
   clearDiscoveredDevices,
@@ -42,6 +43,8 @@ export function Network({ onDiscoveryChange }) {
   const [devices, setDevices] = useState([])
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
+  const [streamCount, setStreamCount] = useState(0)
+  const [recentlyAddedId, setRecentlyAddedId] = useState(null)
   const [monitoring, setMonitoring] = useState(false)
 
   // Initialize authorization state from localStorage
@@ -110,22 +113,53 @@ export function Network({ onDiscoveryChange }) {
     return matched.length > 0 ? matched : devices
   }, [devices, selectedIface])
 
-  const handleRunDiscovery = async () => {
+  const handleRunDiscovery = () => {
     if (!selectedIface) return
     setScanning(true)
-    try {
-      await triggerDiscovery({
-        interface: selectedIface.name,
-        interface_name: selectedIface.name,
-        interface_ip: selectedIface.ip,
-      })
-      await fetchData()
-      notifyChange()
-    } catch (err) {
-      console.error('Discovery error:', err)
-    } finally {
-      setScanning(false)
-    }
+    setStreamCount(0)
+
+    streamDiscovery({
+      interface_ip: selectedIface.ip,
+      subnet: selectedIface.subnet || selectedIface.netmask,
+      onDevice: (newDevice, count) => {
+        setStreamCount(count)
+        setRecentlyAddedId(newDevice.id || newDevice.ip_address)
+        setDevices((prev) => {
+          const existingIdx = prev.findIndex(
+            (d) => d.id === newDevice.id || d.ip_address === newDevice.ip_address
+          )
+          if (existingIdx >= 0) {
+            const updated = [...prev]
+            updated[existingIdx] = { ...updated[existingIdx], ...newDevice }
+            return updated
+          }
+          return [newDevice, ...prev]
+        })
+        notifyChange()
+      },
+      onComplete: async () => {
+        setScanning(false)
+        await fetchData()
+        notifyChange()
+        setTimeout(() => setRecentlyAddedId(null), 3000)
+      },
+      onError: async (err) => {
+        console.warn('Streaming discovery fallback to batch sweep:', err)
+        try {
+          await triggerDiscovery({
+            interface: selectedIface.name,
+            interface_name: selectedIface.name,
+            interface_ip: selectedIface.ip,
+          })
+          await fetchData()
+          notifyChange()
+        } catch (fallbackErr) {
+          console.error('Batch discovery error:', fallbackErr)
+        } finally {
+          setScanning(false)
+        }
+      },
+    })
   }
 
   const handleStartMonitoring = async () => {
@@ -289,7 +323,11 @@ export function Network({ onDiscoveryChange }) {
               className="px-3.5 py-1.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-white disabled:opacity-40 rounded-lg text-xs font-mono flex items-center gap-1.5 transition cursor-pointer font-semibold shadow-sm"
             >
               <Radio className={`w-3.5 h-3.5 ${scanning ? 'animate-spin' : ''}`} />
-              {scanning ? 'Scanning Subnet...' : 'Run Discovery'}
+              {scanning
+                ? streamCount > 0
+                  ? `Streaming (${streamCount} found)...`
+                  : 'Scanning Subnet...'
+                : 'Run Discovery'}
             </button>
 
             {!monitoring ? (
@@ -344,31 +382,39 @@ export function Network({ onDiscoveryChange }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                {filteredDevices.map((device, idx) => (
-                  <tr key={device.id || device.ip_address || `device-${idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                    <td className="py-2.5 px-3 text-slate-800 dark:text-slate-200 font-semibold">{device.ip_address || '—'}</td>
-                    <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-slate-100">{device.hostname || 'Unknown'}</td>
-                    <td className="py-2.5 px-3 text-slate-500 text-[11px]">{device.mac_address || 'Unknown'}</td>
-                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 truncate max-w-[140px]">{device.vendor || 'Unknown'}</td>
-                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{device.device_type || 'Unknown'}</td>
-                    <td className="py-2.5 px-3">
-                      <StatusBadge status={device.status || 'Offline'} />
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-500">
-                      {device.sensor_connected ? (
-                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">✓ Connected</span>
-                      ) : (
-                        <span>✗ None</span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <RiskBadge level={device.trust_level || device.risk_level || 'ADAPTIVE'} />
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-400 text-[11px]">
-                      {formatLastSeen(device.last_seen || device.first_seen)}
-                    </td>
-                  </tr>
-                ))}
+                {filteredDevices.map((device, idx) => {
+                  const isRecentlyAdded = recentlyAddedId === (device.id || device.ip_address)
+                  return (
+                    <tr
+                      key={device.id || device.ip_address || `device-${idx}`}
+                      className={`transition-colors duration-500 hover:bg-slate-50 dark:hover:bg-slate-800/30 ${
+                        isRecentlyAdded ? 'bg-emerald-500/10 dark:bg-emerald-950/40 ring-1 ring-inset ring-emerald-400' : ''
+                      }`}
+                    >
+                      <td className="py-2.5 px-3 text-slate-800 dark:text-slate-200 font-semibold">{device.ip_address || '—'}</td>
+                      <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-slate-100">{device.hostname || 'Unknown'}</td>
+                      <td className="py-2.5 px-3 text-slate-500 text-[11px]">{device.mac_address || 'Unknown'}</td>
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 truncate max-w-[140px]">{device.vendor || 'Unknown'}</td>
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{device.device_type || 'Unknown'}</td>
+                      <td className="py-2.5 px-3">
+                        <StatusBadge status={device.status || 'Offline'} />
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-500">
+                        {device.sensor_connected ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">✓ Connected</span>
+                        ) : (
+                          <span>✗ None</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <RiskBadge level={device.trust_level || device.risk_level || 'ADAPTIVE'} />
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-400 text-[11px]">
+                        {formatLastSeen(device.last_seen || device.first_seen)}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
