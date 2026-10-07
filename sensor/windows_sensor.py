@@ -920,13 +920,8 @@ def run(
         interval = int(os.getenv("SENTINEL_INTERVAL") or cfg.get("interval") or DEFAULT_INTERVAL)
     if private_server is None:
         private_server = os.getenv("SENTINEL_PRIVATE_SERVER") or cfg.get("private_server") or None
-    if drive_dir is None:
-        drive_dir = os.getenv("SENTINEL_DRIVE_DIR") or cfg.get("drive_dir") or None
-
     device_id, stored_token = get_or_create_device_id()
     token = stored_token or DEFAULT_SENSOR_TOKEN
-    drive_path = Path(drive_dir) if drive_dir else DEFAULT_DRIVE_DIR
-    cleanup_stale_staging(drive_path, device_id)
 
     hostname = get_hostname()
     local_ip = get_local_ip()
@@ -960,7 +955,6 @@ def run(
     logger.info(f"Preferred Server: {server} (polling interval: {interval}s)")
     if private_server:
         logger.info(f"Private Network Server: {private_server}")
-    logger.info(f"Google Drive Relay Directory: {drive_path}")
     logger.info("This sensor is authorized to collect endpoint telemetry on this machine.")
 
     checkpoints = load_checkpoints()
@@ -1017,9 +1011,6 @@ def run(
             elif private_server and probe_transport(private_server):
                 current_mode = "PRIVATE_NETWORK"
                 target_url = private_server
-            elif drive_path.exists():
-                current_mode = "GOOGLE_DRIVE"
-                target_url = None
             else:
                 current_mode = "OFFLINE_QUEUE"
                 target_url = None
