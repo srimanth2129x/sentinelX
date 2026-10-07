@@ -8,9 +8,8 @@ from datetime import datetime, timezone
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:5000").rstrip("/")
 SENSOR_TOKEN = os.getenv("SENSOR_TOKEN", "").strip()
-HEADERS = {"Content-Type": "application/json"}
-if SENSOR_TOKEN:
-    HEADERS["X-Sensor-Token"] = SENSOR_TOKEN
+ADMIN_USER = os.getenv("ADMIN_USER", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "SentinelAdmin#2026")
 
 def current_time():
     return datetime.now(timezone.utc).isoformat()
@@ -19,7 +18,33 @@ def get_unique_base_id():
     # Uses timestamp epoch to guarantee unique record IDs on every execution
     return int(time.time() * 1000) % 1_000_000_000
 
+def get_auth_headers():
+    """Acquires valid authentication credentials (JWT Bearer or Sensor Token)."""
+    headers = {"Content-Type": "application/json"}
+    if SENSOR_TOKEN:
+        headers["X-Sensor-Token"] = SENSOR_TOKEN
+
+    try:
+        login_res = requests.post(
+            f"{BACKEND_URL}/api/auth/login",
+            json={"username": ADMIN_USER, "password": ADMIN_PASSWORD},
+            timeout=5
+        )
+        if login_res.status_code == 200:
+            token = login_res.json().get("token")
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+                print(f"[*] Authenticated simulation runner as '{ADMIN_USER}' (Admin JWT acquired)")
+                return headers
+        else:
+            print(f"[-] Auto-login note ({login_res.status_code}): {login_res.text}")
+    except Exception as e:
+        print(f"[-] Backend connection note: {e}")
+
+    return headers
+
 def run_simulation():
+    headers = get_auth_headers()
     base_id = get_unique_base_id()
     print("\n=======================================================")
     print("  SENTINELTWIN TELEMETRY & ATTACK SIMULATION RUNNER")
@@ -41,7 +66,7 @@ def run_simulation():
             "source_ip": "10.0.4.15",
             "logon_type": "2"
         }
-        res = requests.post(f"{BACKEND_URL}/api/events/ingest", json=payload, headers=HEADERS)
+        res = requests.post(f"{BACKEND_URL}/api/events/ingest", json=payload, headers=headers)
         if res.status_code == 201:
             risk = res.json().get("risk", {})
             print(f"  [+] Ingested baseline event #{i} (Score: {risk.get('risk_score')}, Severity: {risk.get('severity')})")
@@ -59,12 +84,14 @@ def run_simulation():
         "observation": 85.0,
         "gate_anomalies": True
     }
-    res = requests.post(f"{BACKEND_URL}/api/cyberdna/simulate", json=sim_payload)
+    res = requests.post(f"{BACKEND_URL}/api/cyberdna/simulate", json=sim_payload, headers=headers)
     if res.status_code == 200:
         data = res.json()
         print(f"  [!] Observation: {data.get('observation')}")
         print(f"  [!] Computed Z-Score: {data.get('z_score')} sigma")
         print(f"  [!] Anomaly Gated/Flagged: {data.get('is_anomaly')}")
+    else:
+        print(f"  [-] CyberDNA simulation failed: {res.status_code} - {res.text}")
 
     # -------------------------------------------------------------------
     # TEST 3: Suspicious Process Execution (Event 4688)
@@ -83,13 +110,15 @@ def run_simulation():
         "command_line": "powershell.exe -nop -w hidden -EncodedCommand SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQA",
         "source_ip": "10.0.4.15"
     }
-    res = requests.post(f"{BACKEND_URL}/api/events/ingest", json=attack_payload, headers=HEADERS)
+    res = requests.post(f"{BACKEND_URL}/api/events/ingest", json=attack_payload, headers=headers)
     if res.status_code == 201:
         risk = res.json().get("risk", {})
         print(f"  [ALERT] Status: 201 Created")
         print(f"  [ALERT] Risk Score: {risk.get('risk_score')}/100 ({risk.get('severity')})")
         for contributor in risk.get("contributors", []):
             print(f"          - [{contributor.get('category')}]: +{contributor.get('points')} pts ({contributor.get('detail')})")
+    else:
+        print(f"  [-] Failed attack event: {res.status_code} - {res.text}")
 
     # -------------------------------------------------------------------
     # TEST 4: Failed Logon Spikes (Event 4625)
@@ -107,10 +136,12 @@ def run_simulation():
             "source_ip": "192.168.1.200",
             "logon_type": "3"
         }
-        res = requests.post(f"{BACKEND_URL}/api/events/ingest", json=fail_payload, headers=HEADERS)
+        res = requests.post(f"{BACKEND_URL}/api/events/ingest", json=fail_payload, headers=headers)
         if res.status_code == 201:
             risk = res.json().get("risk", {})
             print(f"  [!] Failed Logon #{i} logged (Score: {risk.get('risk_score')})")
+        else:
+            print(f"  [-] Failed logon event #{i}: {res.status_code} - {res.text}")
 
     # -------------------------------------------------------------------
     # TEST 5: Lateral Movement Opportunities
@@ -120,12 +151,14 @@ def run_simulation():
         "source_node_id": "dev-corp-workstation-01",
         "source_risk": 85
     }
-    res = requests.post(f"{BACKEND_URL}/api/cyber_twin/propagate", json=prop_payload)
+    res = requests.post(f"{BACKEND_URL}/api/cyber_twin/propagate", json=prop_payload, headers=headers)
     if res.status_code == 200:
         paths = res.json().get("potential_propagation_paths", [])
         print(f"  [+] Calculated {len(paths)} potential lateral movement pathways")
         for p in paths:
             print(f"      -> Target: {p.get('target_node')} | Opportunity Score: {p.get('propagation_opportunity_score')}")
+    else:
+        print(f"  [-] Lateral propagation simulation failed: {res.status_code} - {res.text}")
 
     print("\n=======================================================")
     print("  SIMULATION COMPLETE! Check http://localhost:5173 to view alerts.")

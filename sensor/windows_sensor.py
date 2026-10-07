@@ -4,8 +4,7 @@ Collects Windows Event Log and Sysmon events.
 Sends normalized telemetry to the central SentinelTwin server across prioritized transports:
   1. Direct HTTP (Localhost / Same LAN)
   2. Private / Overlay Network
-  3. Google Drive Asynchronous Relay (Crash-safe atomic staging)
-  4. Local Offline Queue (Decoupled checkpointing)
+  3. Local Offline Queue (Decoupled checkpointing)
 
 IMPORTANT: This sensor must only be run on machines where you
 are explicitly authorized to collect endpoint telemetry.
@@ -123,7 +122,6 @@ CHECKPOINT_FILE = DATA_DIR / "sensor_checkpoint.json"
 DEVICE_FILE = DATA_DIR / "sensor_device.json"
 OFFLINE_QUEUE_FILE = DATA_DIR / "sensor_offline_queue.json"
 LOG_FILE = DATA_DIR / "sensor.log"
-DEFAULT_DRIVE_DIR = Path("sentinel_events")
 
 # Initialize persistent file logging
 try:

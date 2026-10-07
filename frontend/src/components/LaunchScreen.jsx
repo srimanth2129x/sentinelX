@@ -40,6 +40,7 @@ export function LaunchScreen({ onComplete }) {
     let completeCalled = false
 
     const handleComplete = () => {
+      if (window.__sentinelHoldFrame) return
       if (completeCalled) return
       completeCalled = true
       setFadingOut(true)
@@ -52,18 +53,21 @@ export function LaunchScreen({ onComplete }) {
 
     // Safety fallback timer (2.9s max) so dashboard is never blocked
     const fallbackTimer = setTimeout(() => {
-      handleComplete()
+      if (!window.__sentinelHoldFrame) {
+        handleComplete()
+      }
     }, 2900)
 
     // Fade-out trigger timer (~2.0s into the 2.6s animation when breakup sweeps upward/outward)
     const fadeTriggerTimer = setTimeout(() => {
-      if (isMounted) {
+      if (isMounted && !window.__sentinelHoldFrame) {
         setFadingOut(true)
       }
     }, 2050)
 
     try {
       if (containerRef.current) {
+        containerRef.current.innerHTML = ''
         animRef.current = lottie.loadAnimation({
           container: containerRef.current,
           renderer: 'svg',
@@ -79,7 +83,9 @@ export function LaunchScreen({ onComplete }) {
         window.__sentinelLaunchAnim = animRef.current
 
         animRef.current.addEventListener('complete', () => {
-          handleComplete()
+          if (!window.__sentinelHoldFrame) {
+            handleComplete()
+          }
         })
 
         animRef.current.addEventListener('data_failed', () => {
