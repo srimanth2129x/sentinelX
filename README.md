@@ -1,4 +1,4 @@
-# SentinelTwin
+# SentinelX
 
 **Cyber Behavior + Network Impact Intelligence Platform**
 
