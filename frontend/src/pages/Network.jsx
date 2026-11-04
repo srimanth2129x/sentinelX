@@ -3,7 +3,8 @@ import {
   Radio,
   Play,
   Square,
-  Trash2,
+  RotateCcw,
+  EyeOff,
   AlertTriangle,
 } from 'lucide-react'
 import {
@@ -13,7 +14,6 @@ import {
   streamDiscovery,
   startMonitoring,
   stopMonitoring,
-  clearDiscoveredDevices,
 } from '../api/client'
 import { Card, SectionHeader, Spinner, StatusBadge, RiskBadge, EmptyState } from '../components/ui/Card'
 
@@ -46,6 +46,7 @@ export function Network({ onDiscoveryChange }) {
   const [streamCount, setStreamCount] = useState(0)
   const [recentlyAddedId, setRecentlyAddedId] = useState(null)
   const [monitoring, setMonitoring] = useState(false)
+  const [isCleared, setIsCleared] = useState(false)
 
   // Initialize authorization state from localStorage
   const [authorized, setAuthorized] = useState(() => {
@@ -115,6 +116,7 @@ export function Network({ onDiscoveryChange }) {
 
   const handleRunDiscovery = () => {
     if (!selectedIface) return
+    setIsCleared(false)
     setScanning(true)
     setStreamCount(0)
 
@@ -187,16 +189,13 @@ export function Network({ onDiscoveryChange }) {
     }
   }
 
-  const handleClearDevices = async () => {
-    if (!window.confirm('Clear all discovered network devices from the active views?')) return
-    try {
-      await clearDiscoveredDevices()
-      setMonitoring(false)
-      await fetchData()
-      notifyChange()
-    } catch (err) {
-      console.error('Clear devices error:', err)
-    }
+  const handleClearView = () => {
+    setIsCleared(true)
+  }
+
+  const handleRestoreView = () => {
+    setIsCleared(false)
+    fetchData()
   }
 
   const formatLastSeen = (ts) => {
@@ -309,11 +308,16 @@ export function Network({ onDiscoveryChange }) {
         <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
           <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
             Selected Adapter: <span className="text-slate-900 dark:text-slate-100 font-bold">{selectedIface?.name || 'None'}</span> ·{' '}
-            Showing: <span className="text-slate-900 dark:text-slate-100 font-bold">{filteredDevices.length}</span> devices (
+            Showing: <span className="text-slate-900 dark:text-slate-100 font-bold">{(isCleared ? 0 : filteredDevices.length)}</span> devices (
             <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-              {filteredDevices.filter((d) => (d.status || '').toLowerCase() === 'online').length}
+              {(isCleared ? [] : filteredDevices).filter((d) => (d.status || '').toLowerCase() === 'online').length}
             </span>{' '}
             online)
+            {isCleared && (
+              <span className="ml-2 text-amber-600 dark:text-amber-400 font-semibold">
+                ({filteredDevices.length} preserved in database)
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -349,21 +353,50 @@ export function Network({ onDiscoveryChange }) {
               </button>
             )}
 
-            <button
-              onClick={handleClearDevices}
-              className="px-3.5 py-1.5 bg-slate-100 dark:bg-slate-900 hover:bg-red-50 dark:hover:bg-red-950/40 border border-slate-300 dark:border-slate-800 hover:border-red-300 dark:hover:border-red-800 text-slate-600 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-300 rounded-lg text-xs font-mono transition cursor-pointer"
-              title="Clear Discovered Devices"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            {isCleared ? (
+              <button
+                onClick={handleRestoreView}
+                className="px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-mono flex items-center gap-1.5 transition cursor-pointer font-semibold shadow-sm"
+                title="Restore Discovered Devices View (preserves database records)"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Restore View
+              </button>
+            ) : (
+              <button
+                onClick={handleClearView}
+                disabled={filteredDevices.length === 0}
+                className="px-3.5 py-1.5 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 disabled:opacity-40 border border-slate-300 dark:border-slate-800 text-slate-600 dark:text-slate-400 rounded-lg text-xs font-mono flex items-center gap-1.5 transition cursor-pointer font-medium"
+                title="Clear View (retains all records in database)"
+              >
+                <EyeOff className="w-3.5 h-3.5" />
+                Clear View
+              </button>
+            )}
           </div>
         </div>
       </Card>
 
       {/* Discovered Devices Table */}
       <Card>
-        <SectionHeader title={`Discovered Endpoints — ${selectedIface?.name || 'ACTIVE ADAPTER'} (${filteredDevices.length})`} />
-        {filteredDevices.length === 0 ? (
+        <SectionHeader
+          title={`Discovered Endpoints — ${selectedIface?.name || 'ACTIVE ADAPTER'} (${isCleared ? 0 : filteredDevices.length})`}
+          action={
+            isCleared && (
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 flex items-center gap-1 font-bold">
+                <EyeOff className="w-3 h-3" />
+                VIEW CLEARED ({filteredDevices.length} IN DB)
+              </span>
+            )
+          }
+        />
+        {isCleared ? (
+          <EmptyState
+            icon={<EyeOff className="w-6 h-6 text-amber-500" />}
+            title="Discovered Devices View Cleared"
+            message={`All ${filteredDevices.length} network endpoints remain securely stored in the database. Click 'Restore View' or 'Run Discovery' to display.`}
+          />
+        ) : filteredDevices.length === 0 ? (
           <EmptyState message={`No devices discovered on ${selectedIface?.name || 'this interface'}. Click 'Run Discovery' to sweep.`} />
         ) : (
           <div className="overflow-x-auto mt-3">

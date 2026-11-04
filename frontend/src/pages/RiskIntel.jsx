@@ -9,6 +9,7 @@ import {
   RefreshCw,
   ChevronRight,
   RotateCcw,
+  EyeOff,
 } from 'lucide-react'
 import { getRiskDevices, getRiskSummary, getDevices, getAlerts } from '../api/client'
 import { Card, SectionHeader, StatCard, Spinner, EmptyState } from '../components/ui/Card'
@@ -19,15 +20,27 @@ export function RiskIntel() {
   const [summary, setSummary] = useState({})
   const [selectedDeviceId, setSelectedDeviceId] = useState('')
   const [loading, setLoading] = useState(true)
+  const [isCleared, setIsCleared] = useState(false)
   const hasInitialized = useRef(false)
 
   const handleClearView = () => {
+    setIsCleared(true)
     setSelectedDeviceId('')
+  }
+
+  const handleRestoreView = () => {
+    setIsCleared(false)
+    if (riskDevices.length > 0) {
+      setSelectedDeviceId(riskDevices[0].id)
+    } else {
+      loadData()
+    }
   }
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
+      setIsCleared(false)
       const [devRiskRes, sumRes, devicesRes, alertRes] = await Promise.all([
         getRiskDevices().catch(() => ({ data: [] })),
         getRiskSummary().catch(() => ({ data: {} })),
@@ -120,9 +133,16 @@ export function RiskIntel() {
               <h2 className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
                 Explainable Risk Intelligence
               </h2>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-semibold">
-                POINT-ATTRIBUTION SCORING (0–100)
-              </span>
+              {isCleared ? (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 flex items-center gap-1 font-bold">
+                  <EyeOff className="w-3 h-3" />
+                  VIEW CLEARED (RISK MODELS PRESERVED IN DATABASE)
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-semibold">
+                  POINT-ATTRIBUTION SCORING (0–100)
+                </span>
+              )}
             </div>
             <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
               Transparent, audit-ready risk point factors derived from CyberDNA anomalies, MITRE ATT&CK patterns, and triage policies
@@ -131,15 +151,27 @@ export function RiskIntel() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleClearView}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
-            title="Clear selected device detail view"
-            aria-label="Clear View"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Clear View
-          </button>
+          {isCleared ? (
+            <button
+              onClick={handleRestoreView}
+              className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer font-semibold shadow-sm"
+              title="Restore Risk Intelligence View (preserves database records)"
+              aria-label="Restore View"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Restore View
+            </button>
+          ) : (
+            <button
+              onClick={handleClearView}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+              title="Clear View (preserves all risk scoring in database)"
+              aria-label="Clear View"
+            >
+              <EyeOff className="w-3.5 h-3.5" />
+              Clear View
+            </button>
+          )}
           <button
             onClick={loadData}
             className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
@@ -191,9 +223,23 @@ export function RiskIntel() {
             <SectionHeader
               title="Endpoint Risk Inventory"
               subtitle="Select an asset to inspect the transparent scoring attribution"
+              action={
+                isCleared && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 font-bold flex items-center gap-1">
+                    <EyeOff className="w-3 h-3" />
+                    VIEW CLEARED ({riskDevices.length} IN DB)
+                  </span>
+                )
+              }
             />
 
-            {riskDevices.length === 0 ? (
+            {isCleared ? (
+              <EmptyState
+                icon={<EyeOff className="w-6 h-6 text-amber-500" />}
+                title="Risk Inventory View Cleared"
+                message={`All ${riskDevices.length} endpoint risk scores, MITRE ATT&CK factor chains, and telemetry points remain safely stored in the database. Click 'Restore View' or 'Recalculate' to display.`}
+              />
+            ) : riskDevices.length === 0 ? (
               <EmptyState message="No devices discovered yet." />
             ) : (
               <div className="overflow-x-auto mt-3">
@@ -218,10 +264,14 @@ export function RiskIntel() {
                         <tr
                           key={d.id}
                           tabIndex={0}
-                          onClick={() => setSelectedDeviceId(d.id)}
+                          onClick={() => {
+                            setIsCleared(false)
+                            setSelectedDeviceId(d.id)
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault()
+                              setIsCleared(false)
                               setSelectedDeviceId(d.id)
                             }
                           }}
@@ -278,7 +328,17 @@ export function RiskIntel() {
         {/* Right Col: Explainable Risk Console */}
         <div className="space-y-4">
           <Card>
-            {!selectedDevice ? (
+            {isCleared ? (
+              <div className="py-12 px-4 text-center">
+                <EyeOff className="w-8 h-8 text-amber-500 mx-auto mb-2 opacity-70" />
+                <h3 className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100">
+                  Risk Attribution Cleared
+                </h3>
+                <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-1 max-w-xs mx-auto">
+                  Click 'Restore View' or select an asset from the table to inspect explainable point attributions.
+                </p>
+              </div>
+            ) : !selectedDevice ? (
               <div className="py-12 px-4 text-center">
                 <Gauge className="w-8 h-8 text-slate-400 mx-auto mb-2 opacity-50" />
                 <h3 className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100">

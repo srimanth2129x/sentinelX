@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Layers,
   RotateCcw,
+  EyeOff,
 } from 'lucide-react'
 import { getCyberDNAUsers, getCyberDNAProfile, getDevices } from '../api/client'
 import { Card, SectionHeader, Spinner, EmptyState } from '../components/ui/Card'
@@ -16,12 +17,14 @@ export function CyberDNA() {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [profileLoading, setProfileLoading] = useState(false)
+  const [isCleared, setIsCleared] = useState(false)
   const hasInitialized = React.useRef(false)
 
   // Load Entities & Devices
   const loadEntities = useCallback(async () => {
     try {
       setLoading(true)
+      setIsCleared(false)
       const [entRes, devRes] = await Promise.all([
         getCyberDNAUsers().catch(() => ({ data: [] })),
         getDevices().catch(() => ({ data: [] })),
@@ -59,8 +62,18 @@ export function CyberDNA() {
   }, [])
 
   const handleClearView = () => {
+    setIsCleared(true)
     setSelectedEntityId('')
     setProfile(null)
+  }
+
+  const handleRestoreView = () => {
+    setIsCleared(false)
+    if (entities.length > 0) {
+      setSelectedEntityId(entities[0].entity_id || entities[0].id)
+    } else {
+      loadEntities()
+    }
   }
 
   useEffect(() => {
@@ -142,9 +155,16 @@ export function CyberDNA() {
               <h2 className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
                 CyberDNA Behavioral Intelligence
               </h2>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-semibold">
-                WELFORD ONLINE STATS & EWMA DRIFT
-              </span>
+              {isCleared ? (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 flex items-center gap-1 font-bold">
+                  <EyeOff className="w-3 h-3" />
+                  VIEW CLEARED (BASELINES PRESERVED IN DATABASE)
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-semibold">
+                  WELFORD ONLINE STATS & EWMA DRIFT
+                </span>
+              )}
             </div>
             <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
               Continuously calibrated personal baselines, cohort peer variance, and anti-poisoning drift gates
@@ -153,16 +173,29 @@ export function CyberDNA() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleClearView}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
-            title="Clear selected entity and profile view"
-            aria-label="Clear View"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Clear View
-          </button>
+          {isCleared ? (
+            <button
+              type="button"
+              onClick={handleRestoreView}
+              className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer font-semibold shadow-sm"
+              title="Restore behavioral profiles view (baselines remain in database)"
+              aria-label="Restore View"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Restore View
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleClearView}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+              title="Clear View (preserves all statistical baselines in database)"
+              aria-label="Clear View"
+            >
+              <EyeOff className="w-3.5 h-3.5" />
+              Clear View
+            </button>
+          )}
           <button
             type="button"
             onClick={loadEntities}
@@ -199,10 +232,14 @@ export function CyberDNA() {
                       key={id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => setSelectedEntityId(id)}
+                      onClick={() => {
+                        setIsCleared(false)
+                        setSelectedEntityId(id)
+                      }}
                       onKeyDown={(ev) => {
                         if (ev.key === 'Enter' || ev.key === ' ') {
                           ev.preventDefault()
+                          setIsCleared(false)
                           setSelectedEntityId(id)
                         }
                       }}
@@ -239,6 +276,14 @@ export function CyberDNA() {
           {profileLoading ? (
             <Card>
               <Spinner message="Computing behavioral variance and drift..." />
+            </Card>
+          ) : isCleared ? (
+            <Card>
+              <EmptyState
+                icon={<EyeOff className="w-6 h-6 text-amber-500" />}
+                title="Behavioral Intelligence View Cleared"
+                message={`All statistical baselines, Welford variance records, and EWMA drift meters for ${entities.length} monitored entities remain securely preserved in the database. Click 'Restore View' or select an entity to resume display.`}
+              />
             </Card>
           ) : !selectedEntityId ? (
             <Card>

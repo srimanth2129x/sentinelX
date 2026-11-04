@@ -12,6 +12,7 @@ import {
   ChevronRight,
   RotateCcw,
   RefreshCw,
+  EyeOff,
 } from 'lucide-react'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
 import { getDashboardSummary, getDevices, getEvents, getAlerts } from '../api/client'
@@ -158,32 +159,49 @@ export function Overview({ onNav }) {
             </div>
 
             <div className="flex items-center gap-2">
-              {isCleared && (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 dark:bg-surface-elevated text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-border-strong font-semibold">
-                  VIEW CLEARED (POLLING PAUSED)
-                </span>
+              {isCleared ? (
+                <>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 font-bold flex items-center gap-1">
+                    <EyeOff className="w-3 h-3" />
+                    VIEW CLEARED (DATA PRESERVED IN DATABASE)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRefresh}
+                    disabled={loading}
+                    className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer font-semibold shadow-sm"
+                    title="Restore overview display and resume polling (database records intact)"
+                    aria-label="Restore View"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Restore View
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleClearView}
+                    className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+                    title="Clear locally displayed overview values (retains all records in database)"
+                    aria-label="Clear View"
+                  >
+                    <EyeOff className="w-3.5 h-3.5" />
+                    Clear View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRefresh}
+                    disabled={loading}
+                    className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+                    title="Refresh and resume live telemetry polling"
+                    aria-label="Refresh"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                </>
               )}
-              <button
-                type="button"
-                onClick={handleClearView}
-                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
-                title="Clear locally displayed overview values and pause polling"
-                aria-label="Clear View"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Clear View
-              </button>
-              <button
-                type="button"
-                onClick={handleRefresh}
-                disabled={loading}
-                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
-                title="Refresh and resume live telemetry polling"
-                aria-label="Refresh"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
             </div>
           </div>
 

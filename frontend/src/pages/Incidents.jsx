@@ -8,6 +8,7 @@ import {
   Laptop,
   CheckCircle2,
   RotateCcw,
+  EyeOff,
 } from 'lucide-react'
 import { getIncidents, updateIncident } from '../api/client'
 import { Card, Spinner, EmptyState } from '../components/ui/Card'
@@ -21,11 +22,16 @@ export function Incidents() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIncidentForGraph, setSelectedIncidentForGraph] = useState(null)
   const [updatingId, setUpdatingId] = useState(null)
+  const [isCleared, setIsCleared] = useState(false)
 
   const handleClearView = () => {
-    setSearchQuery('')
-    setFilterSeverity('ALL')
+    setIsCleared(true)
     setSelectedIncidentForGraph(null)
+  }
+
+  const handleRestoreView = () => {
+    setIsCleared(false)
+    loadIncidents()
   }
 
   const loadIncidents = useCallback(async () => {
@@ -104,6 +110,12 @@ export function Incidents() {
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-semibold">
                 {incidents.filter((i) => (i.status || '').toUpperCase() !== 'RESOLVED').length} ACTIVE
               </span>
+              {isCleared && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-semibold flex items-center gap-1">
+                  <EyeOff className="w-3 h-3" />
+                  VIEW CLEARED ({incidents.length} PRESERVED IN DATABASE)
+                </span>
+              )}
             </div>
             <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
               Multi-signal threat aggregation, MITRE ATT&CK causal chains, and evidence graphs
@@ -112,17 +124,32 @@ export function Incidents() {
         </div>
 
         <div className="flex items-center gap-2">
+          {isCleared ? (
+            <button
+              onClick={handleRestoreView}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+              title="Restore incidents view"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Restore View
+            </button>
+          ) : (
+            <button
+              onClick={handleClearView}
+              disabled={incidents.length === 0}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer disabled:opacity-40"
+              title="Clear incidents view (records remain stored in database)"
+              aria-label="Clear View"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Clear View
+            </button>
+          )}
           <button
-            onClick={handleClearView}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
-            title="Reset active filters and evidence view"
-            aria-label="Clear View"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Clear View
-          </button>
-          <button
-            onClick={loadIncidents}
+            onClick={() => {
+              setIsCleared(false)
+              loadIncidents()
+            }}
             className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
             aria-label="Refresh incidents"
           >
@@ -190,7 +217,15 @@ export function Incidents() {
 
       {/* Incidents List */}
       <div className="space-y-3">
-        {filteredIncidents.length === 0 ? (
+        {isCleared ? (
+          <Card>
+            <EmptyState
+              icon={<ShieldAlert className="w-6 h-6 text-slate-400" />}
+              title="Incidents View Cleared"
+              message={`All ${incidents.length} security incidents and causal chains remain safely preserved in the database. Click 'Restore View' or 'Refresh' to display.`}
+            />
+          </Card>
+        ) : filteredIncidents.length === 0 ? (
           <Card>
             <EmptyState
               icon={<ShieldAlert className="w-6 h-6 text-slate-400" />}

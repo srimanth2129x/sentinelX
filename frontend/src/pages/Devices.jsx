@@ -8,6 +8,8 @@ import {
   Server,
   ArrowUpDown,
   Share2,
+  RotateCcw,
+  EyeOff,
 } from 'lucide-react'
 import { getDevices, authorizeDevice, revokeDevice } from '../api/client'
 import { Card, SectionHeader, Spinner, EmptyState } from '../components/ui/Card'
@@ -21,6 +23,19 @@ export function Devices({ onNav }) {
   const [sensorFilter, setSensorFilter] = useState('ALL')
   const [sortField, setSortField] = useState('risk_score')
   const [sortOrder, setSortOrder] = useState('desc')
+  const [isCleared, setIsCleared] = useState(false)
+
+  const handleClearView = () => {
+    setIsCleared(true)
+    setSearchQuery('')
+    setTypeFilter('ALL')
+    setSensorFilter('ALL')
+  }
+
+  const handleRestoreView = () => {
+    setIsCleared(false)
+    loadDevices()
+  }
 
   const loadDevices = useCallback(async () => {
     try {
@@ -137,6 +152,12 @@ export function Devices({ onNav }) {
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-semibold">
                 {devices.length} MONITORED ASSETS
               </span>
+              {isCleared && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-semibold flex items-center gap-1">
+                  <EyeOff className="w-3 h-3" />
+                  VIEW CLEARED ({devices.length} PRESERVED IN DATABASE)
+                </span>
+              )}
             </div>
             <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
               Continuous ARP discovery, hardware fingerprinting, transport mode, and trust gating
@@ -144,13 +165,39 @@ export function Devices({ onNav }) {
           </div>
         </div>
 
-        <button
-          onClick={loadDevices}
-          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh Inventory
-        </button>
+        <div className="flex items-center gap-2">
+          {isCleared ? (
+            <button
+              onClick={handleRestoreView}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+              title="Restore device inventory view"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Restore View
+            </button>
+          ) : (
+            <button
+              onClick={handleClearView}
+              disabled={devices.length === 0}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer disabled:opacity-40"
+              title="Clear active inventory view (data remains stored in database)"
+              aria-label="Clear View"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Clear View
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setIsCleared(false)
+              loadDevices()
+            }}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh Inventory
+          </button>
+        </div>
       </div>
 
       {/* Filter & Search Toolbar */}
@@ -199,11 +246,17 @@ export function Devices({ onNav }) {
       {/* Assets Table */}
       <Card>
         <SectionHeader
-          title={`Monitored Endpoints (${filteredDevices.length})`}
+          title={`Monitored Endpoints (${(isCleared ? [] : filteredDevices).length})`}
           subtitle="Real-time devices discovered and tracked on the local network"
         />
 
-        {filteredDevices.length === 0 ? (
+        {isCleared ? (
+          <EmptyState
+            icon={<Laptop className="w-6 h-6 text-slate-400" />}
+            title="Asset Inventory View Cleared"
+            message={`All ${devices.length} endpoint devices, fingerprints, and authentication records remain safely preserved in the database. Click 'Restore View' or 'Refresh Inventory' to display.`}
+          />
+        ) : filteredDevices.length === 0 ? (
           <EmptyState
             icon={<Laptop className="w-6 h-6 text-slate-400" />}
             title="No Assets Found"
@@ -273,7 +326,7 @@ export function Devices({ onNav }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                {filteredDevices.map((dev) => (
+                {(isCleared ? [] : filteredDevices).map((dev) => (
                   <tr key={dev.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                     {/* Hostname */}
                     <td className="py-2.5 px-3">

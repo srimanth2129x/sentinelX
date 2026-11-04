@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { BellRing, RefreshCw, Search, RotateCcw } from 'lucide-react'
+import { BellRing, RefreshCw, Search, RotateCcw, EyeOff } from 'lucide-react'
 import { getAlerts } from '../api/client'
 import { Card, SectionHeader, Spinner, EmptyState } from '../components/ui/Card'
 import { RiskBadge, StatusBadge, MitreBadge } from '../components/ui/Badge'
@@ -11,11 +11,16 @@ export default function AlertsView({ onAlertChange }) {
   const [selectedAlertForEvidence, setSelectedAlertForEvidence] = useState(null)
   const [severityFilter, setSeverityFilter] = useState('ALL')
   const [searchQuery, setSearchQuery] = useState('')
+  const [isCleared, setIsCleared] = useState(false)
 
   const handleClearView = () => {
-    setSearchQuery('')
-    setSeverityFilter('ALL')
+    setIsCleared(true)
     setSelectedAlertForEvidence(null)
+  }
+
+  const handleRestoreView = () => {
+    setIsCleared(false)
+    fetchAlerts()
   }
 
   const fetchAlerts = useCallback(async () => {
@@ -73,6 +78,12 @@ export default function AlertsView({ onAlertChange }) {
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-semibold">
                 {alerts.filter(a => (a.status || '').toUpperCase() !== 'RESOLVED').length} ACTIVE ALERTS
               </span>
+              {isCleared && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-semibold flex items-center gap-1">
+                  <EyeOff className="w-3 h-3" />
+                  VIEW CLEARED ({alerts.length} PRESERVED IN DATABASE)
+                </span>
+              )}
             </div>
             <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
               Correlated anomaly detections, MITRE ATT&CK technique tags, and explainable causal evidence graphs
@@ -81,17 +92,32 @@ export default function AlertsView({ onAlertChange }) {
         </div>
 
         <div className="flex items-center gap-2">
+          {isCleared ? (
+            <button
+              onClick={handleRestoreView}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
+              title="Restore alerts view"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Restore View
+            </button>
+          ) : (
+            <button
+              onClick={handleClearView}
+              disabled={alerts.length === 0}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer disabled:opacity-40"
+              title="Clear alerts view (records remain stored in database)"
+              aria-label="Clear View"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Clear View
+            </button>
+          )}
           <button
-            onClick={handleClearView}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
-            title="Reset active filters and detail views"
-            aria-label="Clear View"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Clear View
-          </button>
-          <button
-            onClick={fetchAlerts}
+            onClick={() => {
+              setIsCleared(false)
+              fetchAlerts()
+            }}
             className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-surface-elevated dark:hover:bg-surface-interactive border border-slate-200/90 dark:border-border-base text-slate-700 dark:text-text-secondary rounded text-xs font-mono flex items-center gap-1.5 transition cursor-pointer"
             aria-label="Refresh alerts"
           >
@@ -140,12 +166,18 @@ export default function AlertsView({ onAlertChange }) {
       {/* Alert Table */}
       <Card>
         <SectionHeader
-          title={`Detected Security Alerts (${filteredAlerts.length})`}
+          title={`Detected Security Alerts (${(isCleared ? [] : filteredAlerts).length})`}
           subtitle="Triage queue with MITRE ATT&CK technique linkage and causal chain inspection"
         />
 
         {loading && alerts.length === 0 ? (
           <Spinner message="Checking threat detection queue..." />
+        ) : isCleared ? (
+          <EmptyState
+            icon={<BellRing className="w-6 h-6 text-slate-400" />}
+            title="Alerts View Cleared"
+            message={`All ${alerts.length} security alerts and evidence graphs remain safely stored in the database. Click 'Restore View' or 'Refresh' to display.`}
+          />
         ) : filteredAlerts.length === 0 ? (
           <EmptyState
             icon={<BellRing className="w-6 h-6 text-slate-400" />}
@@ -166,7 +198,7 @@ export default function AlertsView({ onAlertChange }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                {filteredAlerts.map((al) => (
+                {(isCleared ? [] : filteredAlerts).map((al) => (
                   <tr key={al.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                     <td className="py-3 px-4">
                       <RiskBadge level={al.severity || 'HIGH'} />
