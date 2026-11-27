@@ -1,7 +1,0 @@
-{
-  "serverUrl": "http://127.0.0.1:5000",
-  "socWebUrl": "http://localhost:5173",
-  "refreshInterval": 5000,
-  "theme": "dark",
-  "autoConnect": true
-}

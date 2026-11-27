@@ -22,7 +22,6 @@ All launchers and build scripts are organized in the [`scripts/`](scripts/) dire
 
 | Script | Description |
 | :--- | :--- |
-| **[`scripts/build_user_app.bat`](scripts/build_user_app.bat)** | Compiles Vite UI and packages the standalone Windows desktop application. |
 | **[`scripts/build_sensor_exe.bat`](scripts/build_sensor_exe.bat)** | Builds the standalone Windows endpoint sensor executable with PyInstaller. |
 | **[`scripts/start_all.bat`](scripts/start_all.bat)** | Starts the backend server and frontend console simultaneously. |
 | **[`scripts/start_backend.bat`](scripts/start_backend.bat)** | Launches the Flask REST API service (`http://127.0.0.1:5000`). |
@@ -31,7 +30,6 @@ All launchers and build scripts are organized in the [`scripts/`](scripts/) dire
 
 ---
 
-## 📦 Individual Desktop App Package
+## 🖥️ Desktop Application
 
-For direct deployment or testing on separate laptops:
-- **`app_test/`**: Contains the standalone `SentinelTwin-User.exe` application, config file, unpacked directory, and source code.
+The legacy Electron demo application has been retired. The production desktop client will be introduced as a Tauri 2 application in a separate implementation phase.
