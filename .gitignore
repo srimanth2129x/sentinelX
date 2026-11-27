@@ -47,3 +47,8 @@ build/
 # Scratch scripts and temporary files
 scratch/
 
+
+# Retired Electron individual-user application
+individual-user-app/
+release/SentinelTwin-User.exe
+release/sentinel_user_config.json

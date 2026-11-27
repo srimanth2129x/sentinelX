@@ -1,6 +1,6 @@
 # SentinelTwin — Complete Operations & Runbook
 
-Welcome to SentinelTwin! This guide explains how to configure, start, build, and run the entire SentinelTwin platform: the central server (Flask API + React SOC Console) and the standalone Windows Telemetry Sensor.
+Welcome to SentinelTwin! This guide explains how to configure, start, build, and run the entire SentinelTwin platform: the central server (legacy Flask API + React SOC Console migration baseline) and the standalone Windows Telemetry Sensor. The Electron individual-user demo has been retired; Tauri packaging will be added during the new application implementation.
 
 ---
 
@@ -8,9 +8,9 @@ Welcome to SentinelTwin! This guide explains how to configure, start, build, and
 
 ```text
 CENTRAL SERVER (Laptop A)
-  ├── Backend API (Flask on Port 5000, bound to 127.0.0.1 by default)
+  ├── Backend API (legacy Flask on Port 5000, bound to 127.0.0.1 by default; migration planned)
   ├── SQLite Database (data/sentineltwin.db)
-  └── SOC Dashboard (React + Vite on Port 5173)
+  └── SOC Dashboard (legacy React + Vite on Port 5173; migration baseline)
            ▲
            │ Telemetry (HTTP / Google Drive / Offline Queue)
            ▼

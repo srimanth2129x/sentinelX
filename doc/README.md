@@ -58,14 +58,9 @@ python -m backend.app
 # → http://127.0.0.1:5000 (Default presentation-safe local binding)
 ```
 
-### 3. Frontend SOC Console
-```bash
-cd frontend
-npm install
-npm run dev
-# → http://localhost:5173
-```
-*In the top bar, click **Sign In** and authenticate using your administrator credentials to unlock administrative controls.*
+### 3. Existing SOC Console (migration baseline)
+
+The current React SOC console is retained as a reference and migration baseline. Its Flask integration will be replaced during the planned FastAPI migration. The retired Electron individual-user app is not a supported application.
 
 ### 4. Windows Telemetry Sensor (on authorized Windows endpoint)
 ```bash
@@ -108,7 +103,7 @@ Key verified test suites:
 
 ## Stack
 
-- **Backend**: Python 3.10+, Flask, SQLite, PyJWT, NetworkX
+- **Backend (current)**: Python, Flask, SQLite, PyJWT, NetworkX; planned migration target: FastAPI + PostgreSQL
 - **Frontend**: React 18, Vite, Tailwind CSS, Cytoscape.js, Recharts, Lucide Icons
 - **Network**: OS ARP table, ICMP ping sweep, netifaces
 - **Endpoint**: Windows Security Event Log, Sysmon (pywin32, ctypes)
