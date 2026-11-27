@@ -18,6 +18,16 @@ ENDPOINTS / WORKSTATIONS (Laptop A, Laptop B, etc.)
   └── SentinelTwin-Sensor.exe (Standalone Windows Binary)
 ```
 
+> [!NOTE]
+> **Architecture Modernization & Migration Roadmap**:
+> - **Retired Application**: The legacy Electron individual-user application (`individual-user-app/` and `scripts/build_user_app.bat`) has been retired and removed.
+> - **Planned Desktop Application**: A native client built with **Tauri 2 + Rust** and **React + TypeScript + Vite** is planned for subsequent implementation.
+> - **Planned Backend Migration**: Migration from Flask to **FastAPI + Python** is planned.
+> - **Planned Central Storage**: Migration from SQLite to **PostgreSQL** is planned for enterprise multi-node deployments.
+> - **Migration Baseline**: The existing **Flask REST API**, **SQLite** database, and **React SOC Console** serve as the migration baseline and behavioral reference.
+> - **Windows Sensor Supported**: The standalone **Windows Telemetry Sensor** (`sensor/`, `scripts/build_sensor_exe.bat`, and `release/SentinelTwin-Sensor.exe`) remains an actively supported, production-tested component.
+> - *Note: The new architecture has not yet been implemented; this phase is strictly repository cleanup and baseline stabilization.*
+
 ---
 
 ## 1. Environment Configuration & First-Time Admin Bootstrap
