@@ -14,23 +14,33 @@ SentinelTwin is a **defensive observation platform** only. It does not exploit, 
 
 ---
 
-## Architecture
+## Architecture & Modernization Roadmap
 
 ```text
 Real Wi-Fi / Network
      ↓
 Network Discovery (ARP + ICMP ping)
      ↓
-Device Database (SQLite)
+Device Database (SQLite baseline → PostgreSQL planned)
      ↓
-Windows Sensor (optional endpoint telemetry)
+Windows Sensor (Standalone Windows Telemetry Binary)
      ↓
 Event Pipeline → CyberDNA Engine → Risk Intelligence
      ↓
 Risk-Gated Cyber Twin (NetworkX graph simulation)
      ↓
-React SOC Console (Protected by JWT RBAC)
+SOC Console (Flask baseline → FastAPI planned / Tauri 2 Client planned)
 ```
+
+> [!NOTE]
+> **Architectural Transition Notice**:
+> - **Retired Application**: The legacy Electron individual-user prototype (`individual-user-app/`) has been retired and removed from the active codebase.
+> - **Planned Desktop Application**: A native client built with **Tauri 2 + Rust** and **React + TypeScript + Vite** is planned for subsequent implementation.
+> - **Planned API Migration**: Central API modernization from Flask to **FastAPI + Python** is planned.
+> - **Planned Central Storage**: Migration from SQLite to **PostgreSQL** is planned for enterprise multi-node deployments.
+> - **Migration Baseline**: The existing **Flask REST API**, **SQLite** database, and **React SOC Console** are retained as the migration baseline and behavioral reference.
+> - **Windows Sensor Supported**: The standalone **Windows Telemetry Sensor** (`sensor/`, `release/SentinelTwin-Sensor.exe`) remains an actively supported, production-tested component.
+> - *Note: The new architecture has not yet been implemented; this phase is strictly repository cleanup and baseline stabilization.*
 
 ---
 
@@ -52,15 +62,15 @@ copy .env.example .env
 # (Optional) For multi-device LAN testing: set HOST=0.0.0.0 (default: 127.0.0.1)
 ```
 
-### 2. Backend Service
+### 2. Backend Service (Migration Baseline)
 ```bash
 python -m backend.app
 # → http://127.0.0.1:5000 (Default presentation-safe local binding)
 ```
 
-### 3. Existing SOC Console (migration baseline)
+### 3. Existing SOC Console (Migration Baseline)
 
-The current React SOC console is retained as a reference and migration baseline. Its Flask integration will be replaced during the planned FastAPI migration. The retired Electron individual-user app is not a supported application.
+The current React SOC console is retained as a reference and migration baseline. Its Flask integration will be replaced during the planned FastAPI migration. The retired Electron individual-user app is no longer a supported application.
 
 ### 4. Windows Telemetry Sensor (on authorized Windows endpoint)
 ```bash
@@ -79,7 +89,6 @@ python sensor/windows_sensor.py --server http://127.0.0.1:5000
 Verify all components, auth gates, and detection models:
 ```bash
 python -m pytest -v
-# Total: 62 / 62 passing tests
 ```
 
 Key verified test suites:
@@ -103,7 +112,7 @@ Key verified test suites:
 
 ## Stack
 
-- **Backend (current)**: Python, Flask, SQLite, PyJWT, NetworkX; planned migration target: FastAPI + PostgreSQL
-- **Frontend**: React 18, Vite, Tailwind CSS, Cytoscape.js, Recharts, Lucide Icons
+- **Backend (current baseline)**: Python, Flask, SQLite, PyJWT, NetworkX; planned target: FastAPI + PostgreSQL
+- **Frontend (current baseline)**: React 18, Vite, Tailwind CSS, Cytoscape.js, Recharts, Lucide Icons; planned target: Tauri 2 + React + TS
 - **Network**: OS ARP table, ICMP ping sweep, netifaces
-- **Endpoint**: Windows Security Event Log, Sysmon (pywin32, ctypes)
+- **Endpoint (supported)**: Windows Security Event Log, Sysmon (pywin32, ctypes), standalone compiled executable (`release/SentinelTwin-Sensor.exe`)

@@ -34,12 +34,6 @@ dist/
 .vscode/
 .idea/
 
-# Individual User App build outputs
-individual-user-app/node_modules/
-individual-user-app/dist/
-individual-user-app/dist_package/
-release/SentinelTwin-User/
-
 # PyInstaller build artifacts
 build/
 *.zip
@@ -47,8 +41,12 @@ build/
 # Scratch scripts and temporary files
 scratch/
 
-
 # Retired Electron individual-user application
 individual-user-app/
 release/SentinelTwin-User.exe
 release/sentinel_user_config.json
+release/SentinelTwin-User/
+
+# Tauri build artifacts (planned desktop application)
+src-tauri/target/
+**/src-tauri/target/

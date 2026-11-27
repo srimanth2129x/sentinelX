@@ -30,6 +30,15 @@ All launchers and build scripts are organized in the [`scripts/`](scripts/) dire
 
 ---
 
-## 🖥️ Desktop Application
+## 🖥️ Desktop Application & Migration Roadmap
 
-The legacy Electron demo application has been retired. The production desktop client will be introduced as a Tauri 2 application in a separate implementation phase.
+> [!NOTE]
+> **Status: Repository Cleanup & Migration Baseline Preparation**
+> The project is currently preparing for an architectural modernization. The new components have not yet been implemented; the current codebase serves as the migration and verification baseline.
+
+- **Retired Component**: The legacy Electron individual-user application (`individual-user-app/` and related build scripts) has been fully retired and removed from the active repository.
+- **Planned Desktop Client**: A high-performance, native desktop application built with **Tauri 2 + Rust** and **React + TypeScript + Vite** is planned for the next implementation phase.
+- **Planned Backend Modernization**: Migration from the current Flask service to **FastAPI + Python** is planned.
+- **Planned Central Storage**: Migration from SQLite to **PostgreSQL** is planned for centralized production data persistence.
+- **Migration Baseline**: The existing **Flask REST API**, **SQLite** database, and **React SOC Console** remain the active baseline and behavioral reference during this transition.
+- **Windows Telemetry Sensor**: The standalone **Windows Telemetry Sensor** (`sensor/`, `scripts/build_sensor_exe.bat`, and `release/SentinelTwin-Sensor.exe`) remains a fully supported, active, and verified core component.
